@@ -21,6 +21,7 @@ class SantoriniEngine:
                 print("readyok")
             elif line.startswith("position"):
                 self.board = Board(line.split(" ")[1])
+                print("Position set.")
             elif line.startswith("go"):
                 if self.board is None:
                     print("bestmove none")

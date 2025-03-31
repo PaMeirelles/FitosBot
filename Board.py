@@ -735,7 +735,7 @@ class Board:
                         continue
                     build_sqs = self._get_build_sq(from_sq, second_move_sq)
                     for build_sq in build_sqs:
-                        moves.append(ArtemisMove(from_sq, second_move_sq, build_sq))
+                        moves.append(ArtemisMove(from_sq=from_sq, to_sq=second_move_sq, build_sq=build_sq, mid_sq=to_sq))
         return moves
 
     def _generate_moves_atlas(self):
