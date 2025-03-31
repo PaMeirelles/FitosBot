@@ -702,7 +702,7 @@ class Board:
         moves = []
 
         for wi in worker_index:
-            from_sq = self.workers[wi]
+            from_sq = wi
             for to_sq in NEIGHBOURS[from_sq]:
                 occupant = self._which_worker_is_here(to_sq)
                 if (self.blocks[to_sq] == 4 or (occupant is not None and self._is_ally_worker(occupant)) or
@@ -722,7 +722,7 @@ class Board:
         moves = []
 
         for wi in worker_index:
-            from_sq = self.workers[wi]
+            from_sq = wi
             for to_sq in NEIGHBOURS[from_sq]:
                 if not self.is_free(to_sq) or self.blocks[to_sq] - self.blocks[from_sq] > 1:
                     continue
@@ -744,7 +744,7 @@ class Board:
         moves = []
 
         for wi in worker_index:
-            from_sq = self.workers[wi]
+            from_sq = wi
             for to_sq in NEIGHBOURS[from_sq]:
                 if not self.is_free(to_sq) or self.blocks[to_sq] - self.blocks[from_sq] > 1:
                     continue
@@ -761,7 +761,7 @@ class Board:
         moves = []
 
         for wi in worker_index:
-            from_sq = self.workers[wi]
+            from_sq = wi
             for to_sq in NEIGHBOURS[from_sq]:
                 if not self.is_free(to_sq) or self.blocks[to_sq] - self.blocks[from_sq] > 1:
                     continue
@@ -780,7 +780,7 @@ class Board:
         moves = []
 
         for wi in worker_index:
-            from_sq = self.workers[wi]
+            from_sq = wi
             for to_sq in NEIGHBOURS[from_sq]:
                 if not self.is_free(to_sq) or self.blocks[to_sq] - self.blocks[from_sq] > 1:
                     continue
@@ -796,7 +796,7 @@ class Board:
         moves = []
 
         for wi in worker_index:
-            from_sq = self.workers[wi]
+            from_sq = wi
             for to_sq in NEIGHBOURS[from_sq]:
                 if not self.is_free(to_sq) or self.blocks[to_sq] - self.blocks[from_sq] > 1:
                     continue
@@ -810,7 +810,7 @@ class Board:
         moves = []
 
         for wi in worker_index:
-            from_sq = self.workers[wi]
+            from_sq = wi
             from_h = self.blocks[from_sq]
 
             # Single-step normal moves
@@ -845,7 +845,7 @@ class Board:
         moves = []
 
         for wi in worker_index:
-            from_sq = self.workers[wi]
+            from_sq = wi
             from_h = self.blocks[from_sq]
 
             for to_sq in NEIGHBOURS[from_sq]:
@@ -878,7 +878,7 @@ class Board:
         moves = []
 
         for wi in worker_index:
-            from_sq = self.workers[wi]
+            from_sq = wi
             from_h = self.blocks[from_sq]
 
             # Option 1: normal move without optional build
