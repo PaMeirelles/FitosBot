@@ -832,6 +832,11 @@ class Board:
                 for build_sq in build_sqs:
                     moves.append(HermesMove(from_sq, [to_sq], build_sq))
 
+            # no-move
+            build_sqs = self._get_build_sq(from_sq, from_sq)
+            for build_sq in build_sqs:
+                moves.append(HermesMove(from_sq, [], build_sq))
+
             visited = set()
             stack = [(from_sq, [from_sq])]
             while stack:
