@@ -56,7 +56,7 @@ engine.run()
 #
 # # blocks = [1, 0, 0, 3, 0, 1, 1, 4, 0, 3, 0, 4, 2, 0, 1, 0, 2, 2, 0, 0, 0, 0, 3, 1, 0]
 # # board = Board(make_position(blocks, (13, 12), (18, 23), 1, Gods.APOLLO, Gods.ATHENA))
-# board = Board("1G4N4N4N1G2N4N4N2N4N4N2N4N3N0B1N4N2N2N4N2N1N4N4N0B1360")
+# board = Board("0N4N2N3N0B3N4N2G1N2N4N2N3N4N2N4N2B4N4N3N1N4N4N1G1N1090")
 # moves = board.generate_moves()
 # print(moves)
 # for m in moves:
