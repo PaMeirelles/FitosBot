@@ -186,7 +186,7 @@ class Board:
             return False
 
         # Before special checks, ensure the chosen worker is indeed theirs:
-        if not self._worker_belongs_to_current_player(move):
+        if not self._worker_belongs_to_current_player(move.from_sq):
             return False
 
         # If Athena effect is active, the *current* player is not allowed to move up
@@ -271,17 +271,16 @@ class Board:
     #                           GOD-SPECIFIC CHECKS
     ############################################################################
 
-    def _worker_belongs_to_current_player(self, move: Move) -> bool:
+    def _worker_belongs_to_current_player(self, sq: int) -> bool:
         """
         Check if move.from_sq is indeed owned by the current player.
          - If self.turn == 1 => workers[0..1]
          - If self.turn == -1 => workers[2..3]
         """
-        from_sq = move.from_sq
         if self.turn == 1:
-            return from_sq in (self.workers[0], self.workers[1])
+            return sq in (self.workers[0], self.workers[1])
         else:
-            return from_sq in (self.workers[2], self.workers[3])
+            return sq in (self.workers[2], self.workers[3])
 
     def _attempts_to_move_up(self, move: Move) -> bool:
         """Check if from->to is an upward movement of at least +1 block."""
@@ -404,14 +403,14 @@ class Board:
 
     def _apollo_make_move(self, move: ApolloMove):
         occupant_index = self._which_worker_is_here(move.to_sq)
+        orig_index = self.workers.index(move.from_sq)
         if occupant_index is not None:
             if not self._is_opponent_worker(occupant_index):
                 raise Exception("Apollo cannot swap with allied worker")
             self.workers[occupant_index] = move.from_sq
 
         # Move active worker
-        self._move_worker(move)
-
+        self.workers[orig_index] = move.to_sq
         # Build
         self.blocks[move.build_sq] += 1
 
@@ -762,9 +761,10 @@ class Board:
                     continue
                 build_sqs = self._get_build_sq(from_sq, to_sq)
                 for build_sq in build_sqs:
-                    moves.append(AtlasMove(from_sq, to_sq, build_sq, False))
+                    from_h = self.blocks[build_sq]
+                    moves.append(AtlasMove(from_sq, to_sq, build_sq, False, from_h))
                     if self.blocks[build_sq] != 4:
-                        moves.append(AtlasMove(from_sq, to_sq, build_sq, True))
+                        moves.append(AtlasMove(from_sq, to_sq, build_sq, True, from_h))
         return moves
 
     def _generate_moves_demeter(self):
@@ -887,7 +887,7 @@ class Board:
                 for build_sq in build_sqs:
                     if push_sq is not None and push_sq == build_sq:
                         continue
-                    moves.append(MinotaurMove(from_sq, to_sq, build_sq))
+                    moves.append(MinotaurMove(from_sq, to_sq, build_sq, push_sq is not None))
 
         return moves
 
@@ -942,7 +942,183 @@ class Board:
 
         return [move for move in dispatch.get(god)() if self.move_is_valid(move)]
 
+    def unmake_move(self, move: Move) -> None:
+        """
+        Undo the move by calling the appropriate per-god undo function based on the move type.
+        Also checks if the move type is valid for the current player's god.
+        Assumes that make_move flipped the turn at the end of the move.
+        """
+        # Flip turn back to get the player who made the move
+        self.turn *= -1
+        current_player = 0 if self.turn == 1 else 1
+        god = self.gods[current_player]
 
+        god_to_move_type = {
+            Gods.APOLLO: ApolloMove,
+            Gods.ARTEMIS: ArtemisMove,
+            Gods.ATHENA: AthenaMove,
+            Gods.ATLAS: AtlasMove,
+            Gods.DEMETER: DemeterMove,
+            Gods.HEPHAESTUS: HephaestusMove,
+            Gods.HERMES: HermesMove,
+            Gods.MINOTAUR: MinotaurMove,
+            Gods.PAN: PanMove,
+            Gods.PROMETHEUS: PrometheusMove,
+        }
 
+        if not isinstance(move, god_to_move_type[god]):
+            raise Exception(f"Move type {type(move).__name__} does not match god {god.name}")
 
+        move_type_to_undo_fn = {
+            ApolloMove: self._undo_apollo_move,
+            ArtemisMove: self._undo_artemis_move,
+            AthenaMove: self._undo_athena_move,
+            AtlasMove: self._undo_atlas_move,
+            DemeterMove: self._undo_demeter_move,
+            HephaestusMove: self._undo_hephaestus_move,
+            HermesMove: self._undo_hermes_move,
+            MinotaurMove: self._undo_minotaur_move,
+            PanMove: self._undo_pan_move,
+            PrometheusMove: self._undo_prometheus_move,
+        }
 
+        undo_fn = move_type_to_undo_fn.get(type(move))
+        if undo_fn is None:
+            raise Exception(f"No undo function for move type {type(move).__name__}")
+
+        undo_fn(move)
+
+    # ------------------------------------------------------------------------
+    #                            Helper Methods
+    # ------------------------------------------------------------------------
+
+    def _find_active_worker_undo(self, to_sq: int) -> int:
+        """
+        Find the index of this player's active worker (the one that moved),
+        which should now be at 'to_sq'. Raises Exception if not found.
+        """
+        for i in range(4):
+            if self.workers[i] == to_sq and self._worker_belongs_to_current_player(to_sq):
+                return i
+        raise Exception("Failed to find active worker at square {to_sq}")
+
+    def _move_worker_back(self, worker_index: int, from_sq: int) -> None:
+        """
+        Moves the given worker index back to 'from_sq'.
+        """
+        self.workers[worker_index] = from_sq
+
+    def _decrement_block(self, build_sq: int, n: int = 1) -> None:
+        """
+        Decrease the block height of 'build_sq' by n.
+        """
+        self.blocks[build_sq] -= n
+
+    def _decrement_blocks(self, build_squares: list[int]) -> None:
+        """
+        Decrease the block height of multiple squares by 1 each, in order.
+        """
+        for sq in build_squares:
+            self._decrement_block(sq)
+
+    def _restore_block_height(self, build_sq: int, old_height: int) -> None:
+        """
+        Restore the block at 'build_sq' to a specific 'old_height'.
+        """
+        self.blocks[build_sq] = old_height
+
+    def _undo_opponent_push(self, from_sq: int, to_sq: int) -> None:
+        """
+        Used by Minotaur or others who push an opponent from 'to_sq' to some push_sq.
+        This function computes push_sq, sees if there's an opponent there, and moves
+        them back from push_sq to 'to_sq'.
+        """
+        push_sq = _calculate_push_square(from_sq, to_sq)
+        opp_index = self._which_worker_is_here(push_sq)
+        if opp_index is not None and self._is_opponent_worker(opp_index):
+            self.workers[opp_index] = to_sq
+
+    # ------------------------------------------------------------------------
+    #                Per-God Undo Functions Using the Helpers
+    # ------------------------------------------------------------------------
+
+    def _undo_apollo_move(self, move: ApolloMove) -> None:
+        # Undo build
+        self._decrement_block(move.build_sq)
+
+        # Find active worker and move it back
+        active_worker = self._find_active_worker_undo(move.to_sq)
+        # If an opponent was swapped, that opponent is still at move.from_sq
+        # so move it back first
+        opp_index = self._which_worker_is_here(move.from_sq)
+        if opp_index is not None and self._is_opponent_worker(opp_index):
+            self.workers[opp_index] = move.to_sq
+
+        self._move_worker_back(active_worker, move.from_sq)
+
+    def _undo_artemis_move(self, move: ArtemisMove) -> None:
+        self._decrement_block(move.build_sq)
+        active_worker = self._find_active_worker_undo(move.to_sq)
+        self._move_worker_back(active_worker, move.from_sq)
+
+    def _undo_athena_move(self, move: AthenaMove) -> None:
+        self._decrement_block(move.build_sq)
+        active_worker = self._find_active_worker_undo(move.to_sq)
+        self._move_worker_back(active_worker, move.from_sq)
+        # Clear Athena's effect
+        self.prevent_up_next_turn = False
+
+    def _undo_atlas_move(self, move: AtlasMove) -> None:
+        # Move the worker back first
+        active_worker = self._find_active_worker_undo(move.to_sq)
+        self._move_worker_back(active_worker, move.from_sq)
+
+        # Then restore the block to its original height (stored in move.orig_h).
+        self._restore_block_height(move.build_sq, move.orig_h)
+
+    def _undo_demeter_move(self, move: DemeterMove) -> None:
+        # If there was a second build, undo it first
+        if move.build_sq_2 is not None:
+            self._decrement_block(move.build_sq_2)
+        self._decrement_block(move.build_sq_1)
+        active_worker = self._find_active_worker_undo(move.to_sq)
+        self._move_worker_back(active_worker, move.from_sq)
+
+    def _undo_hephaestus_move(self, move: HephaestusMove) -> None:
+        # If there was a second build, undo it
+        if move.build_sq_2 is not None:
+            self._decrement_block(move.build_sq_2)
+        self._decrement_block(move.build_sq_1)
+        active_worker = self._find_active_worker_undo(move.to_sq)
+        self._move_worker_back(active_worker, move.from_sq)
+
+    def _undo_hermes_move(self, move: HermesMove) -> None:
+        self._decrement_block(move.build_sq)
+        # If the worker moved at all, it should be at move.final_sq
+        if move.squares:  # worker moved
+            active_worker = self._find_active_worker_undo(move.final_sq)
+            self._move_worker_back(active_worker, move.from_sq)
+
+    def _undo_minotaur_move(self, move: MinotaurMove) -> None:
+        # Undo build
+        self._decrement_block(move.build_sq)
+        # Move the active worker back
+        active_worker = self._find_active_worker_undo(move.to_sq)
+        self._move_worker_back(active_worker, move.from_sq)
+        # If the move had 'pushed=True', an opponent was moved from to_sq to push_sq
+        # so move them back from push_sq to to_sq
+        if move.pushed:
+            self._undo_opponent_push(move.from_sq, move.to_sq)
+
+    def _undo_pan_move(self, move: PanMove) -> None:
+        self._decrement_block(move.build_sq)
+        active_worker = self._find_active_worker_undo(move.to_sq)
+        self._move_worker_back(active_worker, move.from_sq)
+        self.last_move_height_diff = 0
+
+    def _undo_prometheus_move(self, move: PrometheusMove) -> None:
+        self._decrement_block(move.build_sq)
+        active_worker = self._find_active_worker_undo(move.to_sq)
+        self._move_worker_back(active_worker, move.from_sq)
+        if move.optional_build is not None:
+            self._decrement_block(move.optional_build)

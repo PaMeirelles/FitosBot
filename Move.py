@@ -207,6 +207,7 @@ class AthenaMove(ApolloMove):
 
 @dataclass
 class MinotaurMove(ApolloMove):
+    pushed: bool
     pass
 
 @dataclass
@@ -214,6 +215,7 @@ class AtlasMove(Move):
     to_sq: int
     build_sq: int
     dome: bool
+    orig_h:Optional[int]
 
     @property
     def final_sq(self) -> int:
@@ -239,4 +241,4 @@ class AtlasMove(Move):
         dome = len(move_text) == 7 and move_text[6] == "D"
         if len(move_text) == 7 and not dome:
             raise ValueError("Atlas 7th char must be 'D' if present.")
-        return cls(from_sq=from_sq, to_sq=to_sq, build_sq=build_sq, dome=dome)
+        return cls(from_sq=from_sq, to_sq=to_sq, build_sq=build_sq, dome=dome, orig_h=None)
