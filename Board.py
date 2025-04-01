@@ -60,7 +60,6 @@ def _calculate_push_square(from_sq: int, to_sq: int) -> int:
 def _adj_ok(from_sq: int, to_sq: int) -> bool:
     return to_sq in NEIGHBOURS[from_sq]
 
-
 class Board:
     def __init__(self, position: str):
         """
@@ -596,6 +595,7 @@ class Board:
             return False
 
         occupant = self._which_worker_is_here(move.to_sq)
+        push_sq = None
         if occupant is not None:
             if not self._is_opponent_worker(occupant):
                 return False
@@ -606,7 +606,8 @@ class Board:
             if self.blocks[move.to_sq] == 4:
                 return False
 
-        if not self._build_ok_sq(move.from_sq, move.to_sq, move.build_sq):
+        if not self._build_ok_sq(move.from_sq, move.to_sq, move.build_sq) or (
+                push_sq is not None and push_sq == move.build_sq):
             return False
 
         return True
@@ -870,11 +871,10 @@ class Board:
                     continue
                 if self.blocks[to_sq] == 4 or self.blocks[to_sq] - from_h > 1:
                     continue
+                push_sq = None
                 if occupant is not None and self._is_opponent_worker(occupant):
                     # compute push destination
-                    dx = to_sq % 5 - from_sq % 5
-                    dy = to_sq // 5 - from_sq // 5
-                    push_sq = to_sq + dx + dy * 4  # same as: to_sq + (to_sq - from_sq)
+                    push_sq = _calculate_push_square(from_sq, to_sq)
 
                     if not (0 <= push_sq < 25):
                         continue
@@ -885,6 +885,8 @@ class Board:
 
                 build_sqs = self._get_build_sq(from_sq, to_sq)
                 for build_sq in build_sqs:
+                    if push_sq is not None and push_sq == build_sq:
+                        continue
                     moves.append(MinotaurMove(from_sq, to_sq, build_sq))
 
         return moves
