@@ -861,22 +861,22 @@ class Board:
 
             for to_sq in NEIGHBOURS[from_sq]:
                 occupant = self._which_worker_is_here(to_sq)
-                if occupant is None or self._is_ally_worker(occupant):
+                if occupant is not None and self._is_ally_worker(occupant):
                     continue
                 if self.blocks[to_sq] == 4 or self.blocks[to_sq] - from_h > 1:
                     continue
+                if occupant is not None and self._is_opponent_worker(occupant):
+                    # compute push destination
+                    dx = to_sq % 5 - from_sq % 5
+                    dy = to_sq // 5 - from_sq // 5
+                    push_sq = to_sq + dx + dy * 4  # same as: to_sq + (to_sq - from_sq)
 
-                # compute push destination
-                dx = to_sq % 5 - from_sq % 5
-                dy = to_sq // 5 - from_sq // 5
-                push_sq = to_sq + dx + dy * 4  # same as: to_sq + (to_sq - from_sq)
-
-                if not (0 <= push_sq < 25):
-                    continue
-                if not self.is_free(push_sq):
-                    continue
-                if self.blocks[push_sq] == 4:
-                    continue
+                    if not (0 <= push_sq < 25):
+                        continue
+                    if not self.is_free(push_sq):
+                        continue
+                    if self.blocks[push_sq] == 4:
+                        continue
 
                 build_sqs = self._get_build_sq(from_sq, to_sq)
                 for build_sq in build_sqs:
