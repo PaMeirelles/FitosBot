@@ -79,8 +79,8 @@ class Board:
         self.parse_position(position)
 
     def parse_position(self, position: str):
-        if len(position) != 53:
-            raise ValueError(f"Invalid position: Expected length 53, got {len(position)}")
+        if len(position) != 54:
+            raise ValueError(f"Invalid position: Expected length 54, got {len(position)}")
 
         num_gray_workers = 0
         num_blue_workers = 0
@@ -106,7 +106,8 @@ class Board:
                 raise ValueError(f"Invalid worker code '{worker_code}' at index {2 * i + 1}")
 
         if num_gray_workers != 2 or num_blue_workers != 2:
-            raise ValueError(f"Invalid worker count: Found {num_gray_workers} gray workers and {num_blue_workers} blue workers")
+            raise ValueError(
+                f"Invalid worker count: Found {num_gray_workers} gray workers and {num_blue_workers} blue workers")
 
         if position[50] == '0':
             self.turn = 1
@@ -120,6 +121,9 @@ class Board:
             self.gods[1] = Gods(int(position[52]))
         except ValueError as e:
             raise ValueError(f"Invalid god indices at positions 51–52: {position[51:53]}") from e
+
+        if position[53] == '1':
+            self.prevent_up_next_turn = True
 
     def position_to_text(self) -> str:
         position = []
@@ -135,7 +139,8 @@ class Board:
         turn_char = '0' if self.turn == 1 else '1'
         god1 = str(self.gods[0].value)
         god2 = str(self.gods[1].value)
-        return ''.join(position) + turn_char + god1 + god2
+        athena_up = '1' if self.prevent_up_next_turn else '0'
+        return ''.join(position) + turn_char + god1 + god2 + athena_up
 
     def is_free(self, square: int) -> bool:
         """Check if 'square' is not occupied by a worker and is < 4 blocks tall."""
@@ -685,7 +690,7 @@ class Board:
         moves = []
 
         for wi in worker_index:
-            from_sq = self.workers[wi]
+            from_sq = wi
             for to_sq in NEIGHBOURS[from_sq]:
                 if not self.is_free(to_sq) or self.blocks[to_sq] - self.blocks[from_sq] > 1:
                     continue
@@ -709,8 +714,14 @@ class Board:
                         self.blocks[to_sq] - self.blocks[from_sq] > 1):
                     continue
                 for build_sq in NEIGHBOURS[to_sq]:
-                    if not self.is_free(build_sq) and (build_sq != from_sq or (occupant is not None and self._is_ally_worker(occupant))):
-                        continue
+                    if build_sq == from_sq:
+                        if occupant is not None:
+                            continue
+                        if self.blocks[build_sq] == 4:
+                            continue
+                    else:
+                        if not self.is_free(build_sq):
+                            continue
                     if build_sq == to_sq:
                         continue
                     moves.append(ApolloMove(from_sq, to_sq, build_sq))
@@ -786,8 +797,8 @@ class Board:
                     continue
                 build_sqs = self._get_build_sq(from_sq, to_sq)
                 for build_sq in build_sqs:
-                    moves.append(DemeterMove(from_sq, to_sq, build_sq))
-                    moves.append(DemeterMove(from_sq, to_sq, build_sq, build_sq))
+                    moves.append(HephaestusMove(from_sq, to_sq, build_sq))
+                    moves.append(HephaestusMove(from_sq, to_sq, build_sq, build_sq))
         return moves
 
     def _generate_moves_pan(self):
@@ -920,7 +931,7 @@ class Board:
             Gods.PROMETHEUS: self._generate_moves_prometheus,
         }
 
-        return dispatch.get(god)()
+        return [move for move in dispatch.get(god)() if self.move_is_valid(move)]
 
 
 
