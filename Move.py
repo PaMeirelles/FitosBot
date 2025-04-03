@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Type, TypeVar, List, Optional
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
 
 def text_to_square(square_text):
     row = ord(square_text[0]) - ord('a')
@@ -20,6 +21,7 @@ T = TypeVar('T', bound='Move')
 @dataclass
 class Move(ABC):
     from_sq: int
+    had_athena_flag: bool = field(default=False, init=False)
 
     @property
     @abstractmethod
@@ -207,7 +209,7 @@ class AthenaMove(ApolloMove):
 
 @dataclass
 class MinotaurMove(ApolloMove):
-    pushed: bool
+    pushed: bool=False
     pass
 
 @dataclass
@@ -215,7 +217,7 @@ class AtlasMove(Move):
     to_sq: int
     build_sq: int
     dome: bool
-    orig_h:Optional[int]
+    orig_h:Optional[int]=None
 
     @property
     def final_sq(self) -> int:

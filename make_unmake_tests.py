@@ -1,4 +1,4 @@
-from Board import Board, Gods
+from Board import Board, God
 
 def make_position(
     blocks,        # list of 25 integers in [0..4]
@@ -51,7 +51,7 @@ def full_unmake_move_tests():
          call make_move then unmake_move, and verify that the board state
          is exactly as before.
     """
-    all_gods = list(Gods)
+    all_gods = list(God)
     test_positions = []
 
     # Define several block configurations:
@@ -93,7 +93,7 @@ def full_unmake_move_tests():
                     blue_workers=blue_workers,
                     turn=1,
                     god_gray=god,
-                    god_blue=Gods.APOLLO,
+                    god_blue=God.APOLLO,
                     athena_up=False
                 )
                 test_positions.append(pos_gray)
@@ -103,7 +103,7 @@ def full_unmake_move_tests():
                     gray_workers=gray_workers,
                     blue_workers=blue_workers,
                     turn=-1,
-                    god_gray=Gods.APOLLO,
+                    god_gray=God.APOLLO,
                     god_blue=god,
                     athena_up=False
                 )
