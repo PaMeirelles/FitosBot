@@ -1,7 +1,7 @@
 from Board import Board, God
 from Engine import SantoriniEngine
 from Move import text_to_square
-
+from search import get_best_move
 
 engine = SantoriniEngine()
 engine.run()
@@ -56,15 +56,7 @@ engine.run()
 
 # blocks = [1, 0, 0, 3, 0, 1, 1, 4, 0, 3, 0, 4, 2, 0, 1, 0, 2, 2, 0, 0, 0, 0, 3, 1, 0]
 # board = Board(make_position(blocks, (13, 12), (18, 23), 1, Gods.APOLLO, Gods.ATHENA))
-# board = Board("0N3N3N0G2G2N3N4N4N4N2N3N3N1B3N0N1N3N0B1N0N0N1N0N1N0580")
+# board = Board("0N0N0N0N0N1G1B0N0N0N2N0N0G0N1N0N3N0N0B0N0N0N0N0N0N0870")
+# move = get_best_move(board, 3000000)
 # moves = board.generate_moves()
-# print(moves)
-# for m in moves:
-#     print(m.to_text())
-
-# blocks = [0 for _ in range(25)]
-# blocks[0] = 1
-# blocks[1] = 2
-# blocks[5] = 3
-# pos = make_position(blocks=blocks, gray_workers=(0, 2), blue_workers=(3, 4), turn=1, athena_up=False, god_gray=Gods.ARTEMIS, god_blue=Gods.ATHENA)
-# print(pos)
+# print(move.to_text(), move)
