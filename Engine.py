@@ -1,10 +1,12 @@
 from Board import Board
 from search import get_best_move
+from transposition_table import TranspositionTable
 
 
 class SantoriniEngine:
     def __init__(self):
         self.board = None
+        self.tt = TranspositionTable()
 
     def run(self):
         while True:
@@ -51,7 +53,7 @@ class SantoriniEngine:
                 remaining_time_ms = gtime if self.board.turn == 1 else btime
 
                 # Call get_best_move with correct arguments
-                move = get_best_move(self.board, remaining_time_ms)
+                move = get_best_move(self.board, remaining_time_ms, self.tt)
                 if not move:
                     print("bestmove none")
                 else:

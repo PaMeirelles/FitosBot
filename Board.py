@@ -6,6 +6,8 @@ from Move import Move, ApolloMove, ArtemisMove, AthenaMove, AtlasMove, DemeterMo
     PrometheusMove
 
 
+FNV_prime = 1099511628211
+
 ###############################################################################
 # Enums, Constants, and Utility
 ###############################################################################
@@ -80,6 +82,17 @@ class Board:
         self.last_move_height_diff = 0           # For Pan's special drop-win
         self.won = False
         self.parse_position(position)
+
+    def __hash__(self):
+        state_str = self.position_to_text().encode("utf-8")
+        # FNV-1a 64-bit offset basis and prime
+        hash_value = 14695981039346656037
+
+        for byte in state_str:
+            hash_value ^= byte
+            hash_value = (hash_value * FNV_prime) & 0xFFFFFFFFFFFFFFFF  # Keep within 64 bits
+
+        return hash_value
 
     def parse_position(self, position: str):
         if len(position) != 54:
@@ -256,6 +269,11 @@ class Board:
         # We'll reset last_move_height_diff each time we do a move.
         self.last_move_height_diff = 0
 
+        if self.blocks[move.from_sq] < self.blocks[move.final_sq] == 3:
+            self.won = True
+        else:
+            self.won = False
+
         self._make_move_for_god(current_god, move)
 
         # After the move is applied, check if the current god is Athena and if they moved up.
@@ -266,11 +284,6 @@ class Board:
             # Otherwise, if the player wasn't Athena (or didn't move up),
             # we clear the effect (the next player is free to move up).
             self.prevent_up_next_turn = False
-
-        if self.blocks[move.from_sq] < self.blocks[move.final_sq] == 3:
-            self.won = True
-        else:
-            self.won = False
 
         # Switch turn to the other side
         self.turn *= -1

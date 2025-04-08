@@ -22,6 +22,7 @@ T = TypeVar('T', bound='Move')
 class Move(ABC):
     from_sq: int
     had_athena_flag: bool = field(default=False, init=False)
+    score:int = field(init=False, default=0)
 
     @property
     @abstractmethod

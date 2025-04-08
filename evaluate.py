@@ -1,47 +1,47 @@
 from Board import Board
+from constants import NEIGHBOURS
 
-posScore = [
-   -50, -30, -10, -30, -50,
-   -30,  10,  30,  10, -30,
-   -10,  30,  50,  30,  10,
-   -30,  10,  30,  10, -30,
-   -50, -30, -10, -30, -50
-]
+posScore = [-50, -30, -10, -30, -50,
+            -30,  10,  30,  10, -30,
+            -10,  30,  50,  30,  10,
+            -30,  10,  30,  10, -30,
+            -50, -30, -10, -30, -50]
 
-# heightScore[i] is the bonus if a worker is on height i, for i = 0..2.
-# If a worker stands on height 3, that typically is an instant win.
-heightScore = [0, 100, 400]
+heightScore = [0, 100, 400, 350]
+
+sameHeightSupport = [-30, 0, 55]
+nextHeightSupport = [0, 35, 120]
+
+def score_position(b: Board) -> int:
+
+    def score_worker(worker_pos: int) -> int:
+        square = b.workers[worker_pos]
+        height = b.blocks[square]
+
+        p_score = posScore[square]
+        h_score = heightScore[height]
+
+        support = 0
+
+        if height > 0:
+            same_h = 0
+            next_h = 0
+            for n in NEIGHBOURS[square]:
+                if b.is_free(n):
+                    if b.blocks[n] == height:
+                        same_h += 1
+                    elif b.blocks[n] == height + 1:
+                        next_h += 1
+
+            same_h = min(same_h, 2)
+            next_h = min(next_h, 2)
+            support = sameHeightSupport[same_h] + nextHeightSupport[next_h]
+
+        return p_score + h_score + support
+
+    return score_worker(0) + score_worker(1) - score_worker(2) - score_worker(3)
 
 
-def score_position(board: Board) -> int:
-    """
-    Returns an integer evaluation of the position from Gray's point of view:
-      + higher = better for Gray
-      + lower  = better for Blue
-    """
-
-    # Check if there's a winner:
-    state = board.check_state()
-    if state == 1:
-        return 999999  # Gray has won
-    if state == -1:
-        return -999999  # Blue has won
-
-    # Otherwise, sum up each side’s position scores and height bonuses
-    score = 0
-    gray_workers = [board.workers[0], board.workers[1]]
-    blue_workers = [board.workers[2], board.workers[3]]
-
-    for sq in gray_workers:
-        h = board.blocks[sq]
-        if h >= 3:
-            h = 2
-        score += posScore[sq] + heightScore[h]
-
-    for sq in blue_workers:
-        h = board.blocks[sq]
-        if h >= 3:
-            h = 2
-        score -= (posScore[sq] + heightScore[h])
-
-    return score
+if __name__ == '__main__':
+    b = Board("2G2N0N0N2N0N4N0N1N2B0N1B0G0N2N0N0N0N0N0N0N0N0N0N0N1500")
+    print(score_position(b))
