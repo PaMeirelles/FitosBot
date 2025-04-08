@@ -138,10 +138,10 @@ def get_best_move(board: Board, remaining_time_ms: int, tt: TranspositionTable, 
         # Only break out of iterative deepening if a winning mate is found.
         if best_move and (getattr(best_move, "build", None) == WIN or (best_score is not None and best_score > 9000)):
             break
+        print(best_move.to_text(), best_score, depth, time.time() - start_time)
 
         if time.time() > end_time or (max_depth is not None and depth == max_depth):
             break
-        print(best_move.to_text(), best_score, depth, time.time() - start_time)
         depth += 1
 
     return best_move
@@ -149,8 +149,22 @@ def get_best_move(board: Board, remaining_time_ms: int, tt: TranspositionTable, 
 
 
 if __name__ == '__main__':
-    board = Board("2N0N0N0N0N4N2G1N1N0N0N2G1B0B4N0N2N0N2N0N0N0N4N0N0N1160")
-    remaining_time_ms: int = 1000 * 60 * 10 * 10
-    tt = TranspositionTable()
-    bm = get_best_move(board, remaining_time_ms, tt)
-    print(bm.to_text())
+    positions = \
+        ["0N0N0N0N0N0N0N0N1N0G0B0N0G0N0N0N0N0N0N0N0N0N0N0N0B1290",
+         "0N0N0N0N0N0N0N0N1G0N0B0N0G1N0N0N0N1N0B0N0N0N0N0N0N1291",
+         "0N0N0N0N0N0N0N0N1N1N0N0B0G1G0N0N0N2N0B0N0N0N0N0N0N1290",
+         "0N1N0N0N0N0N0N0B1G1N0N0N1N1G0N0N0N3N0B0N0N0N0N0N0N1291",
+         "0N1N0B0N0N0N1N0N2N1N0N0N1G1G0N0N0N3N0B0N0N0N0N0N0N1290",
+         "0N2N0N0N0N0N1G0B3N1N0N1N1N1G0N0N0N3N0B0N0N0N0N0N0N1290",
+         "0N3N0N0B1N0N1N0G3N1N0N1N2N1G0N0N0N3N0B0N0N0N0N0N0N1290",
+         "0N3N0N0B1N0N1N0G4N1G0N1N3N2N0B0N0N3N0N0N0N0N0N0N0N1290",
+         "0N3N0N0B1N0N1G1N4N1G0N1N3N3N0N0N0N3N0B0N0N0N0N0N0N1291",
+         "0N3N0N0B1N0N1N1G4N1G0N2N3N3N0B0N0N3N1N1N0N0N0N0N0N1290",
+         "0N3N0N0B1N0N1G2N4N1G0N2N4N3N0N0N0N3N1B1N0N0N0N0N0N1290"]
+
+    for p in positions:
+        board = Board(p)
+        remaining_time_ms: int = 1000 * 60 * 10 * 10
+        tt = TranspositionTable()
+        bm = get_best_move(board, remaining_time_ms, tt, max_depth=4)
+    # print(bm.to_text())

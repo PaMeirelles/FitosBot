@@ -1,3 +1,4 @@
+from collections import deque
 from typing import List, Optional
 from enum import Enum
 
@@ -754,12 +755,14 @@ class Board:
         worker_index = self._get_worker_index()
 
         moves = []
+        reached = set()
 
         for wi in worker_index:
             from_sq = wi
             for to_sq in NEIGHBOURS[from_sq]:
                 if not self.is_free(to_sq) or self.blocks[to_sq] - self.blocks[from_sq] > 1:
                     continue
+                reached.add((from_sq, to_sq))
                 build_sqs = self._get_build_sq(from_sq, to_sq)
                 for build_sq in build_sqs:
                     moves.append(ArtemisMove(from_sq, to_sq, build_sq))
@@ -767,6 +770,9 @@ class Board:
                     if (not self.is_free(second_move_sq) or self.blocks[second_move_sq] - self.blocks[to_sq] > 1 or
                             second_move_sq == from_sq):
                         continue
+                    if (from_sq, second_move_sq) in reached:
+                        continue
+                    reached.add((from_sq, second_move_sq))
                     build_sqs = self._get_build_sq(from_sq, second_move_sq)
                     for build_sq in build_sqs:
                         moves.append(ArtemisMove(from_sq=from_sq, to_sq=second_move_sq, build_sq=build_sq, mid_sq=to_sq))
@@ -801,12 +807,13 @@ class Board:
                 if not self.is_free(to_sq) or self.blocks[to_sq] - self.blocks[from_sq] > 1:
                     continue
                 build_sqs = self._get_build_sq(from_sq, to_sq)
-                for build_sq_1 in build_sqs:
-                    for build_sq_2 in build_sqs:
+                for i, build_sq_1 in enumerate(build_sqs):
+                    for build_sq_2 in build_sqs[i:]:
                         if build_sq_1 == build_sq_2:
                             moves.append(DemeterMove(from_sq, to_sq, build_sq_1))
                         else:
                             moves.append(DemeterMove(from_sq, to_sq, build_sq_1, build_sq_2))
+
         return moves
 
     def _generate_moves_hephaestus(self):
@@ -840,6 +847,7 @@ class Board:
                     moves.append(PanMove(from_sq, to_sq, build_sq))
         return moves
 
+
     def _generate_moves_hermes(self):
         worker_index = self._get_worker_index()
         moves = []
@@ -861,22 +869,23 @@ class Board:
             for build_sq in build_sqs:
                 moves.append(HermesMove(from_sq, [], build_sq))
 
-            visited = set()
-            stack = [(from_sq, [from_sq])]
-            while stack:
-                current_sq, path = stack.pop()
+            # Multi-step BFS on flat terrain
+            visited = set([from_sq])
+            queue = deque([from_sq])
+            path = []
+
+            while queue:
+                current_sq = queue.popleft()
+                path.append(current_sq)
                 for nei in NEIGHBOURS[current_sq]:
-                    if nei in visited:
-                        continue
-                    if nei in path or not self.is_free(nei):
+                    if nei in visited or not self.is_free(nei):
                         continue
                     if self.blocks[nei] != from_h:
                         continue
-                    new_path = path + [nei]
                     build_sqs = self._get_build_sq(from_sq, nei)
                     for build_sq in build_sqs:
-                        moves.append(HermesMove(from_sq, new_path[1:], build_sq))  # exclude from_sq
-                    stack.append((nei, new_path))
+                        moves.append(HermesMove(from_sq, path[1:], build_sq))  # exclude from_sq
+                    queue.append(nei)
                     visited.add(nei)
         return moves
 
@@ -944,6 +953,8 @@ class Board:
                     for build_sq in build_sqs:
                         if self.blocks[build_sq] == 3 and build_sq == opt_build_sq:
                             continue
+                        if build_sq < opt_build_sq:
+                            continue  # skip reversed duplicates
                         moves.append(PrometheusMove(from_sq, to_sq, build_sq, optional_build=opt_build_sq))
         return moves
 
