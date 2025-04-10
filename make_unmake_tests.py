@@ -1,4 +1,6 @@
-from Board import Board, God
+from Board import Board
+from constants import God
+
 
 def make_position(
     blocks,        # list of 25 integers in [0..4]

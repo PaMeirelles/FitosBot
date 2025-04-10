@@ -1,29 +1,10 @@
 from collections import deque
 from typing import List, Optional
-from enum import Enum
 
-from constants import NEIGHBOURS
+from constants import NEIGHBOURS, ZOBRIST_KEYS, God, zobrist_blocks, zobrist_workers, zobrist_turn, athena
 from Move import Move, ApolloMove, ArtemisMove, AthenaMove, AtlasMove, DemeterMove, HephaestusMove, HermesMove, MinotaurMove, PanMove, \
     PrometheusMove
 
-
-FNV_prime = 1099511628211
-
-###############################################################################
-# Enums, Constants, and Utility
-###############################################################################
-
-class God(Enum):
-    APOLLO = 0
-    ARTEMIS = 1
-    ATHENA = 2
-    ATLAS = 3
-    DEMETER = 4
-    HEPHAESTUS = 5
-    HERMES = 6
-    MINOTAUR = 7
-    PAN = 8
-    PROMETHEUS = 9
 
 ###############################################################################
 # Board Class with Full God Logic
@@ -45,6 +26,11 @@ def _god_move_match(god: God, move: Move) -> bool:
     }
     return isinstance(move, god_to_move_type.get(god, type(None)))
 
+###############################################################################
+# small helper
+###############################################################################
+def _player_of_worker(wi: int) -> int:          # 0 → gray, 1 → blue
+    return 0 if wi < 2 else 1
 
 def _calculate_push_square(from_sq: int, to_sq: int) -> Optional[int]:
     """
@@ -83,17 +69,29 @@ class Board:
         self.last_move_height_diff = 0           # For Pan's special drop-win
         self.won = False
         self.parse_position(position)
+        self._hash = None
 
     def __hash__(self):
-        state_str = self.position_to_text().encode("utf-8")
-        # FNV-1a 64-bit offset basis and prime
-        hash_value = 14695981039346656037
+        if self._hash is not None: return self._hash
+        h = 0
+        blocks = self.blocks  # local aliases avoid attr look‑ups
+        z_blocks = zobrist_blocks  # module‑level aliases (set once)
+        z_workers = zobrist_workers
 
-        for byte in state_str:
-            hash_value ^= byte
-            hash_value = (hash_value * FNV_prime) & 0xFFFFFFFFFFFFFFFF  # Keep within 64 bits
+        for i, level in enumerate(blocks):  # enumerate is a C‑loop
+            if level:
+                h ^= z_blocks[i][level - 1]
 
-        return hash_value
+        # inline the “which colour?” arithmetic: 0/1 for G/B
+        for wi, sq in enumerate(self.workers):
+            h ^= z_workers[sq][wi >> 1]
+
+        if self.turn == 1:
+            h ^= zobrist_turn
+        if self.prevent_up_next_turn:
+            h ^= athena
+        self._hash = h
+        return h
 
     def parse_position(self, position: str):
         if len(position) != 54:
@@ -263,6 +261,7 @@ class Board:
         """Perform the actual move, applying the correct god's special logic."""
         if not self.move_is_valid(move):
             raise Exception("Invalid move")
+        hash(self)
 
         current_player = 0 if self.turn == 1 else 1
         current_god = self.gods[current_player]
@@ -280,14 +279,16 @@ class Board:
         # After the move is applied, check if the current god is Athena and if they moved up.
         # If so, set the flag to prevent the next player from moving up:
         if current_god == God.ATHENA and self.last_move_height_diff > 0:
+            if not self.prevent_up_next_turn: self._xor_hash(ZOBRIST_KEYS["athena"])
             self.prevent_up_next_turn = True
         else:
-            # Otherwise, if the player wasn't Athena (or didn't move up),
-            # we clear the effect (the next player is free to move up).
+            if self.prevent_up_next_turn: self._xor_hash(ZOBRIST_KEYS["athena"])
             self.prevent_up_next_turn = False
 
         # Switch turn to the other side
         self.turn *= -1
+        self._xor_hash(ZOBRIST_KEYS['turn'])
+
 
     ############################################################################
     #                           GOD-SPECIFIC CHECKS
@@ -372,10 +373,20 @@ class Board:
             return worker_index in (0, 1)
 
     def _move_worker(self, move: Move) -> None:
-        for i, wpos in enumerate(self.workers):
+        for wi, wpos in enumerate(self.workers):
             if wpos == move.from_sq:
-                self.workers[i] = move.final_sq
+                player = _player_of_worker(wi)
+                self._xor_hash(ZOBRIST_KEYS["workers"][move.from_sq][player])
+                self._xor_hash(ZOBRIST_KEYS["workers"][move.final_sq][player])
+                self.workers[wi] = move.final_sq
                 break
+
+    def _inc_block(self, sq: int) -> None:
+        h = self.blocks[sq]
+        if h > 0:
+            self._xor_hash(ZOBRIST_KEYS["blocks"][sq][h - 1])
+        self.blocks[sq] += 1
+        self._xor_hash(ZOBRIST_KEYS["blocks"][sq][h])
 
     def _height_ok(self, from_sq: int, to_sq: int) -> bool:
         from_h = self.blocks[from_sq]
@@ -425,85 +436,142 @@ class Board:
             return False
         return True
 
+    def _xor_hash(self, value: int):
+        self._hash ^= value
+
     def _apollo_make_move(self, move: ApolloMove):
         occupant_index = self._which_worker_is_here(move.to_sq)
         orig_index = self.workers.index(move.from_sq)
-        if occupant_index is not None:
-            if not self._is_opponent_worker(occupant_index):
-                raise Exception("Apollo cannot swap with allied worker")
-            self.workers[occupant_index] = move.from_sq
+        from_sq = move.from_sq
+        to_sq = move.final_sq
 
-        # Move active worker
-        self.workers[orig_index] = move.to_sq
-        # Build
-        self.blocks[move.build_sq] += 1
+        if occupant_index is not None:
+            opp_player = _player_of_worker(occupant_index)
+            self._xor_hash(ZOBRIST_KEYS["workers"][to_sq][opp_player])
+            self._xor_hash(ZOBRIST_KEYS["workers"][from_sq][opp_player])
+            self.workers[occupant_index] = from_sq
+
+        orig_player = _player_of_worker(orig_index)
+        self.workers[orig_index] = to_sq
+        self._xor_hash(ZOBRIST_KEYS["workers"][from_sq][orig_player])
+        self._xor_hash(ZOBRIST_KEYS["workers"][to_sq][orig_player])
+
+        self._inc_block(move.build_sq)
+
+    # ─────────────────────────────────────────────────────────
+    # ARTEMIS
+    # ─────────────────────────────────────────────────────────
+    def _artemis_make_move(self, move: ArtemisMove):
+        self._move_worker(move)
+        self._inc_block(move.build_sq)
+
+    # ─────────────────────────────────────────────────────────
+    # ATHENA
+    # ─────────────────────────────────────────────────────────
+    def _athena_make_move(self, move: AthenaMove):
+        from_h = self.blocks[move.from_sq]
+        self._move_worker(move)
+        to_h = self.blocks[move.to_sq]
+        self.last_move_height_diff = to_h - from_h
+        self._inc_block(move.build_sq)
+
+    # ─────────────────────────────────────────────────────────
+    # ATLAS
+    # ─────────────────────────────────────────────────────────
+    def _atlas_make_move(self, move: AtlasMove):
+        self._move_worker(move)
+        h = self.blocks[move.build_sq]
+        if h > 0:
+            self._xor_hash(ZOBRIST_KEYS["blocks"][move.build_sq][h - 1])
+        if move.dome:
+            self.blocks[move.build_sq] = 4
+            self._xor_hash(ZOBRIST_KEYS["blocks"][move.build_sq][3])
+        else:
+            self.blocks[move.build_sq] = h + 1
+            self._xor_hash(ZOBRIST_KEYS["blocks"][move.build_sq][self.blocks[move.build_sq] - 1])
+
+    # ─────────────────────────────────────────────────────────
+    # DEMETER
+    # ─────────────────────────────────────────────────────────
+    def _demeter_make_move(self, move: DemeterMove):
+        self._move_worker(move)
+        self._inc_block(move.build_sq_1)
+        if move.build_sq_2 is not None:
+            self._inc_block(move.build_sq_2)
+
+    # ─────────────────────────────────────────────────────────
+    # HEPHAESTUS
+    # ─────────────────────────────────────────────────────────
+    def _hephaestus_make_move(self, move: HephaestusMove):
+        self._move_worker(move)
+        self._inc_block(move.build_sq_1)
+        if move.build_sq_2 is not None:
+            self._inc_block(move.build_sq_2)
+
+    # ─────────────────────────────────────────────────────────
+    # HERMES
+    # ─────────────────────────────────────────────────────────
+    def _hermes_make_move(self, move: HermesMove):
+        self._move_worker(move)
+        self._inc_block(move.build_sq)
+
+    # ─────────────────────────────────────────────────────────
+    # MINOTAUR
+    # ─────────────────────────────────────────────────────────
+    def _minotaur_make_move(self, move: MinotaurMove):
+        occupant_index = self._which_worker_is_here(move.to_sq)
+        if occupant_index is not None:
+            opp_player = _player_of_worker(occupant_index)
+            push_sq = _calculate_push_square(move.from_sq, move.to_sq)
+            self._xor_hash(ZOBRIST_KEYS["workers"][move.to_sq][opp_player])
+            self._xor_hash(ZOBRIST_KEYS["workers"][push_sq][opp_player])
+            self.workers[occupant_index] = push_sq
+        self._move_worker(move)
+        self._inc_block(move.build_sq)
+
+    # ─────────────────────────────────────────────────────────
+    # PAN
+    # ─────────────────────────────────────────────────────────
+    def _pan_make_move(self, move: PanMove):
+        from_h = self.blocks[move.from_sq]
+        self._move_worker(move)
+        self._inc_block(move.build_sq)
+        to_h = self.blocks[move.to_sq]
+        self.last_move_height_diff = to_h - from_h
+
+    # --------------------------
+    # PROMETHEUS
+    # --------------------------
+
+    def _prometheus_make_move(self, move: PrometheusMove):
+        if move.optional_build is not None:
+            self._inc_block(move.optional_build)
+        self._move_worker(move)
+        self._inc_block(move.build_sq)
 
     # --------------------------
     # ARTEMIS
     # --------------------------
     def _artemis_move_is_valid(self, move: ArtemisMove) -> bool:
-        """
-        Artemis can move twice, but cannot return to the original square.
-        - If mid_sq is not None, it indicates a two-step movement:
-          from_sq -> mid_sq -> to_sq, each step must be valid adjacency
-          and cannot climb more than 1 level, nor step onto a dome.
-          Also 'to_sq' must not be the same as 'from_sq'.
-        - Then build_sq must be adjacent to 'to_sq' and not a dome.
-        """
-        # Always check the first step (from->mid or from->to)
         if move.mid_sq is None:
             if not self._move_checks(move):
                 return False
         else:
-            # Two-step
-            # step1: from_sq -> mid_sq
             if not self._move_checks_sq(move.from_sq, move.mid_sq):
                 return False
-
-            # step2: mid_sq -> to_sq
             if not self._move_checks_sq(move.mid_sq, move.to_sq):
                 return False
-
             if move.to_sq == move.from_sq:
                 return False
-
         if not self._build_ok_sq(move.from_sq, move.final_sq, move.build_sq):
             return False
-
         return True
-
-    def _artemis_make_move(self, move: ArtemisMove):
-        path = [move.from_sq]
-        if move.mid_sq is not None:
-            path.append(move.mid_sq)
-        path.append(move.to_sq)
-
-        # Move step by step
-        for i, wpos in enumerate(self.workers):
-            if wpos == move.from_sq:
-                for sq in path[1:]:
-                    if self._which_worker_is_here(sq) is not None:
-                        raise Exception("Artemis invalid: move path occupied!")
-                    self.workers[i] = sq
-                break
-
-        # Build
-        self.blocks[move.build_sq] += 1
-
 
     # --------------------------
     # ATHENA
     # --------------------------
     def _athena_move_is_valid(self, move: AthenaMove) -> bool:
-        """Basically the same as a standard single-step move (like Apollo) but no swap."""
         return self._complete_checks_sq(move.from_sq, move.to_sq, move.build_sq)
-
-    def _athena_make_move(self, move: AthenaMove):
-        self._move_worker(move)
-        from_h = self.blocks[move.from_sq]
-        to_h = self.blocks[move.to_sq]
-        self.last_move_height_diff = to_h - from_h
-        self.blocks[move.build_sq] += 1
 
     # --------------------------
     # ATLAS
@@ -511,104 +579,49 @@ class Board:
     def _atlas_move_is_valid(self, move: AtlasMove) -> bool:
         return self._complete_checks_sq(move.from_sq, move.to_sq, move.build_sq)
 
-    def _atlas_make_move(self, move: AtlasMove):
-        self._move_worker(move)
-
-        # Build (dome if move.dome==True, otherwise +1)
-        if move.dome:
-            self.blocks[move.build_sq] = 4
-        else:
-            self.blocks[move.build_sq] += 1
-
-
     # --------------------------
     # DEMETER
     # --------------------------
     def _demeter_move_is_valid(self, move: DemeterMove) -> bool:
         if not self._complete_checks_sq(move.from_sq, move.to_sq, move.build_sq_1):
             return False
-
         if move.build_sq_2 is not None:
-            # must be different from build_sq_1
             if move.build_sq_2 == move.build_sq_1:
                 return False
             if not self._build_ok_sq(move.from_sq, move.to_sq, move.build_sq_2):
                 return False
-
         return True
-
-    def _demeter_make_move(self, move: DemeterMove):
-        self._move_worker(move)
-
-        # Build first
-        self.blocks[move.build_sq_1] += 1
-        # Build second if provided
-        if move.build_sq_2 is not None:
-            self.blocks[move.build_sq_2] += 1
-
 
     # --------------------------
     # HEPHAESTUS
     # --------------------------
     def _hephaestus_move_is_valid(self, move: HephaestusMove) -> bool:
-        """
-        Similar to Demeter but the second build, if used, must be on the same square,
-        and we cannot build a dome this way (so the second block cannot raise to 4).
-        """
         if not self._complete_checks_sq(move.from_sq, move.to_sq, move.build_sq_1):
             return False
-
         if move.build_sq_2 is not None:
-            # must be different from build_sq_1
             if move.build_sq_2 != move.build_sq_1 or self.blocks[move.build_sq_2] >= 2:
                 return False
             if not self._build_ok_sq(move.from_sq, move.to_sq, move.build_sq_2):
                 return False
-
         return True
-
-    def _hephaestus_make_move(self, move: HephaestusMove):
-        self._move_worker(move)
-
-        # Build first block
-        self.blocks[move.build_sq_1] += 1
-        # If there's a second build on same square, do it but do not create a dome
-        if move.build_sq_2 is not None:
-            self.blocks[move.build_sq_2] += 1
 
     # --------------------------
     # HERMES
     # --------------------------
     def _hermes_move_is_valid(self, move: HermesMove) -> bool:
-        """
-        Hermes can move multiple times, but only on level 0 if continuing to move.
-        Officially: if you start on level 0, you may keep walking on 0's.
-        The big rule: "You may move your Worker any number of times, but each move must be on ground level (0) only
-        or you can just do a normal single-step if you like. After moving, build once normally."
-        """
         if len(move.squares) == 1:
             return self._complete_checks_sq(move.from_sq, move.final_sq, move.build_sq)
-
-
         current_pos = move.from_sq
         staring_height = self.blocks[move.from_sq]
-
         for idx, nxt in enumerate(move.squares):
             if self.blocks[nxt] != staring_height:
                 return False
-
             if not self._move_checks_sq(current_pos, nxt):
                 return False
-
             current_pos = nxt
-
         if not self._build_ok_sq(move.from_sq, move.final_sq, move.build_sq):
             return False
         return True
-
-    def _hermes_make_move(self, move: HermesMove):
-        self._move_worker(move)
-        self.blocks[move.build_sq] += 1
 
     # --------------------------
     # MINOTAUR
@@ -616,7 +629,6 @@ class Board:
     def _minotaur_move_is_valid(self, move: MinotaurMove) -> bool:
         if not self._height_and_adj_ok(move):
             return False
-
         occupant = self._which_worker_is_here(move.to_sq)
         push_sq = None
         if occupant is not None:
@@ -628,29 +640,10 @@ class Board:
         else:
             if self.blocks[move.to_sq] == 4:
                 return False
-
         if not self._build_ok_sq(move.from_sq, move.to_sq, move.build_sq) or (
                 push_sq is not None and push_sq == move.build_sq):
             return False
-
         return True
-
-    def _minotaur_make_move(self, move: MinotaurMove):
-        occupant_index = self._which_worker_is_here(move.to_sq)
-        if occupant_index is not None:
-            if not self._is_opponent_worker(occupant_index):
-                raise Exception("Minotaur cannot push allied worker")
-            push_sq = _calculate_push_square(move.from_sq, move.to_sq)
-            if push_sq is None or not self.is_free(push_sq):
-                raise Exception("Invalid Minotaur push destination")
-            self.workers[occupant_index] = push_sq
-
-        # Move active worker
-        self._move_worker(move)
-
-        # Build
-        self.blocks[move.build_sq] += 1
-
 
     # --------------------------
     # PAN
@@ -658,39 +651,19 @@ class Board:
     def _pan_move_is_valid(self, move: PanMove) -> bool:
         return self._complete_checks_sq(move.from_sq, move.final_sq, move.build_sq)
 
-    def _pan_make_move(self, move: PanMove):
-        from_height = self.blocks[move.from_sq]
-
-        self._move_worker(move)
-
-        # Build
-        self.blocks[move.build_sq] += 1
-
-        to_height = self.blocks[move.to_sq]
-        self.last_move_height_diff = to_height - from_height
-
     # --------------------------
     # PROMETHEUS
     # --------------------------
     def _prometheus_move_is_valid(self, move: PrometheusMove) -> bool:
         if move.optional_build is None:
             return self._complete_checks_sq(move.from_sq, move.to_sq, move.build_sq)
-
         if not self._build_ok_sq(move.from_sq, move.from_sq, move.optional_build):
             return False
         if self.blocks[move.to_sq] + (move.to_sq == move.optional_build) > self.blocks[move.from_sq]:
-            return False  # cannot move up after building
+            return False
         if not self._complete_checks_sq(move.from_sq, move.to_sq, move.build_sq):
             return False
-
         return True
-
-    def _prometheus_make_move(self, move: PrometheusMove):
-        if move.optional_build is not None:
-            self.blocks[move.optional_build] += 1
-
-        self._move_worker(move)
-        self.blocks[move.build_sq] += 1
 
     def _get_worker_index(self):
         if self.turn == 1:
@@ -989,8 +962,10 @@ class Board:
         Also checks if the move type is valid for the current player's god.
         Assumes that make_move flipped the turn at the end of the move.
         """
+        hash(self)
         # Flip turn back to get the player who made the move
         self.turn *= -1
+        self._xor_hash(ZOBRIST_KEYS['turn'])
         current_player = 0 if self.turn == 1 else 1
         god = self.gods[current_player]
 
@@ -1028,6 +1003,7 @@ class Board:
             raise Exception(f"No undo function for move type {type(move).__name__}")
 
         self.won = False
+        if self.prevent_up_next_turn != move.had_athena_flag: self._xor_hash(ZOBRIST_KEYS["athena"])
         self.prevent_up_next_turn = move.had_athena_flag
         undo_fn(move)
 
@@ -1045,17 +1021,18 @@ class Board:
                 return i
         raise Exception("Failed to find active worker at square {to_sq}")
 
-    def _move_worker_back(self, worker_index: int, from_sq: int) -> None:
-        """
-        Moves the given worker index back to 'from_sq'.
-        """
-        self.workers[worker_index] = from_sq
+    def _move_worker_back(self, wi: int, from_sq: int) -> None:
+        player = _player_of_worker(wi)
+        self._xor_hash(ZOBRIST_KEYS["workers"][self.workers[wi]][player])
+        self._xor_hash(ZOBRIST_KEYS["workers"][from_sq][player])
+        self.workers[wi] = from_sq
 
-    def _decrement_block(self, build_sq: int, n: int = 1) -> None:
-        """
-        Decrease the block height of 'build_sq' by n.
-        """
-        self.blocks[build_sq] -= n
+    def _decrement_block(self, sq: int) -> None:
+        h = self.blocks[sq]
+        self._xor_hash(ZOBRIST_KEYS["blocks"][sq][h - 1])
+        self.blocks[sq] -= 1
+        if self.blocks[sq] > 0:
+            self._xor_hash(ZOBRIST_KEYS["blocks"][sq][self.blocks[sq] - 1])
 
     def _decrement_blocks(self, build_squares: list[int]) -> None:
         """
@@ -1064,11 +1041,13 @@ class Board:
         for sq in build_squares:
             self._decrement_block(sq)
 
-    def _restore_block_height(self, build_sq: int, old_height: int) -> None:
-        """
-        Restore the block at 'build_sq' to a specific 'old_height'.
-        """
-        self.blocks[build_sq] = old_height
+    def _restore_block_height(self, sq: int, orig_h: int) -> None:
+        current_h = self.blocks[sq]
+        if current_h > 0:
+            self._xor_hash(ZOBRIST_KEYS["blocks"][sq][current_h - 1])
+        self.blocks[sq] = orig_h
+        if orig_h > 0:
+            self._xor_hash(ZOBRIST_KEYS["blocks"][sq][orig_h - 1])
 
     def _undo_opponent_push(self, from_sq: int, to_sq: int) -> None:
         """
@@ -1079,48 +1058,41 @@ class Board:
         push_sq = _calculate_push_square(from_sq, to_sq)
         opp_index = self._which_worker_is_here(push_sq)
         if opp_index is not None and self._is_opponent_worker(opp_index):
-            self.workers[opp_index] = to_sq
+            self._move_worker_back(opp_index, to_sq)
 
     # ------------------------------------------------------------------------
     #                Per-God Undo Functions Using the Helpers
     # ------------------------------------------------------------------------
 
     def _undo_apollo_move(self, move: ApolloMove) -> None:
-        # Undo build
         self._decrement_block(move.build_sq)
-
-        # Find active worker and move it back
         active_worker = self._find_active_worker_undo(move.to_sq)
-        # If an opponent was swapped, that opponent is still at move.from_sq
-        # so move it back first
+
         opp_index = self._which_worker_is_here(move.from_sq)
         if opp_index is not None and self._is_opponent_worker(opp_index):
+            opp_player = _player_of_worker(opp_index)
+            self._xor_hash(ZOBRIST_KEYS["workers"][move.from_sq][opp_player])
+            self._xor_hash(ZOBRIST_KEYS["workers"][move.to_sq][opp_player])
             self.workers[opp_index] = move.to_sq
-
         self._move_worker_back(active_worker, move.from_sq)
 
     def _undo_artemis_move(self, move: ArtemisMove) -> None:
         self._decrement_block(move.build_sq)
-        active_worker = self._find_active_worker_undo(move.to_sq)
+        active_worker = self._find_active_worker_undo(move.final_sq)
         self._move_worker_back(active_worker, move.from_sq)
 
     def _undo_athena_move(self, move: AthenaMove) -> None:
         self._decrement_block(move.build_sq)
         active_worker = self._find_active_worker_undo(move.to_sq)
         self._move_worker_back(active_worker, move.from_sq)
-        # Clear Athena's effect
         self.prevent_up_next_turn = False
 
     def _undo_atlas_move(self, move: AtlasMove) -> None:
-        # Move the worker back first
         active_worker = self._find_active_worker_undo(move.to_sq)
         self._move_worker_back(active_worker, move.from_sq)
-
-        # Then restore the block to its original height (stored in move.orig_h).
         self._restore_block_height(move.build_sq, move.orig_h)
 
     def _undo_demeter_move(self, move: DemeterMove) -> None:
-        # If there was a second build, undo it first
         if move.build_sq_2 is not None:
             self._decrement_block(move.build_sq_2)
         self._decrement_block(move.build_sq_1)
@@ -1128,7 +1100,6 @@ class Board:
         self._move_worker_back(active_worker, move.from_sq)
 
     def _undo_hephaestus_move(self, move: HephaestusMove) -> None:
-        # If there was a second build, undo it
         if move.build_sq_2 is not None:
             self._decrement_block(move.build_sq_2)
         self._decrement_block(move.build_sq_1)
@@ -1137,19 +1108,14 @@ class Board:
 
     def _undo_hermes_move(self, move: HermesMove) -> None:
         self._decrement_block(move.build_sq)
-        # If the worker moved at all, it should be at move.final_sq
-        if move.squares:  # worker moved
+        if move.squares:
             active_worker = self._find_active_worker_undo(move.final_sq)
             self._move_worker_back(active_worker, move.from_sq)
 
     def _undo_minotaur_move(self, move: MinotaurMove) -> None:
-        # Undo build
         self._decrement_block(move.build_sq)
-        # Move the active worker back
         active_worker = self._find_active_worker_undo(move.to_sq)
         self._move_worker_back(active_worker, move.from_sq)
-        # If the move had 'pushed=True', an opponent was moved from to_sq to push_sq
-        # so move them back from push_sq to to_sq
         if move.pushed:
             self._undo_opponent_push(move.from_sq, move.to_sq)
 
@@ -1165,3 +1131,4 @@ class Board:
         self._move_worker_back(active_worker, move.from_sq)
         if move.optional_build is not None:
             self._decrement_block(move.optional_build)
+

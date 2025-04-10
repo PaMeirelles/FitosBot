@@ -1,4 +1,5 @@
-from Board import Board, God
+from Board import Board
+from constants import God
 from Engine import SantoriniEngine
 from Move import text_to_square
 from search import get_best_move

@@ -1,6 +1,7 @@
 import unittest
 
-from Board import Board, God
+from Board import Board
+from constants import God
 from Move import (
     Move, ApolloMove, ArtemisMove, AthenaMove, AtlasMove, DemeterMove,
     HephaestusMove, HermesMove, MinotaurMove, PanMove, PrometheusMove
@@ -742,6 +743,135 @@ class TestPrometheus(unittest.TestCase):
         self.assertFalse(board.move_is_valid(move))
 
 
+POS_1 = "0N0N0B0G0N0N0N0N0B0N0N0G0N0N0N0N0N0N0N0N0N0N0N0N0N0310"
+
+class TestBoardHashing(unittest.TestCase):
+    def test_equal_boards_equal_hashes(self):
+        b1 = Board(POS_1)
+        b2 = Board(POS_1)
+        self.assertEqual(hash(b1), hash(b2))
+
+    def test_block_hashing_ok(self):
+        boards = []
+        for sq in range(25):
+            for h in range(5):
+                board = Board(POS_1)
+                board.blocks[sq] = h
+                boards.append(board)
+        set_of_boards = set(boards)
+        self.assertEqual(len(set_of_boards), len(boards))
+
+    def worker_hashing_ok(self):
+        boards = []
+        set_of_boards = set()
+        for w1 in range(25):
+            for w2 in range(25):
+                for w3 in range(25):
+                    for w4 in range(25):
+                        if len({w1, w2, w3, w4}) != 4: continue
+                        pos = make_position(gray_workers=(w1, w2), blue_workers=(w3, w4), blocks=[0] * 25, turn=1, god_gray=God.APOLLO, god_blue=God.ARTEMIS)
+                        b = Board(pos)
+                        boards.append(b)
+                        set_of_boards.add(b)
+        self.assertEqual(len(set_of_boards), len(boards))
+
+    def test_turn_affects_hash(self):
+        b1 = Board(POS_1)
+        b2 = Board(POS_1)
+        b2.turn = -1
+        self.assertNotEqual(hash(b1), hash(b2))
+
+    def test_athena_flag_affects_hash(self):
+        b1 = Board(POS_1)
+        b2 = Board(POS_1)
+        b2.prevent_up_next_turn = True
+        self.assertNotEqual(hash(b1), hash(b2))
+
+    @staticmethod
+    def _stress_scenarios():
+        """Return a list of boards that exercise each god’s tricky case."""
+        return [
+            # Apollo swap
+            create_board(gray_workers=(0, 2), blue_workers=(1, 3),
+                         god_gray=God.APOLLO, god_blue=God.APOLLO),
+
+            # Artemis double‑move
+            create_board(god_gray=God.ARTEMIS, god_blue=God.ARTEMIS),
+
+            # Athena ‘up’ flag active
+            create_board(blocks=[1 if i == 1 else 0 for i in range(25)],
+                         god_gray=God.ATHENA, god_blue=God.APOLLO),
+
+            # Atlas dome builder
+            create_board(god_gray=God.ATLAS, god_blue=God.APOLLO),
+
+            # Demeter double build
+            create_board(god_gray=God.DEMETER, god_blue=God.APOLLO),
+
+            # Hephaestus double build on same square
+            create_board(blocks=[2 if i == 2 else 0 for i in range(25)],
+                         god_gray=God.HEPHAESTUS, god_blue=God.APOLLO),
+
+            # Hermes multi‑step ground move
+            create_board(god_gray=God.HERMES, god_blue=God.APOLLO),
+
+            # Minotaur push (6 → 7 pushes enemy to 8)
+            create_board(gray_workers=(6, 2), blue_workers=(7, 3),
+                         god_gray=God.MINOTAUR, god_blue=God.APOLLO),
+
+            # Pan two‑level drop
+            create_board(blocks=[2 if i == 0 else 0 for i in range(25)],
+                         gray_workers=(0, 2), turn=1,
+                         god_gray=God.PAN, god_blue=God.APOLLO),
+
+            # Prometheus build‑before‑move
+            create_board(god_gray=God.PROMETHEUS, god_blue=God.APOLLO),
+        ]
+
+    def test_hash_consistent_after_make_unmake(self):
+        """make_move + unmake_move must restore the original hash."""
+        for board in self._stress_scenarios():
+            start_hash = hash(board)
+            start_pos  = board.position_to_text()
+
+            for move in board.generate_moves():
+                board.make_move(move)
+                board.unmake_move(move)
+                self.assertEqual(
+                    hash(board), start_hash,
+                    f"Hash mismatch after make/unmake with gods "
+                    f"{board.gods[0].name}/{board.gods[1].name} on move {move}"
+                )
+                self.assertEqual(
+                    board.position_to_text(), start_pos,
+                    f"Board state changed after make/unmake with gods "
+                    f"{board.gods[0].name}/{board.gods[1].name} on move {move}"
+                )
+
+    def test_hash_matches_after_move(self):
+        """
+        After any legal move, hashing the live board and a freshly reconstructed
+        board from its position string must yield identical hashes.
+        """
+        failures = []
+
+        for board in self._stress_scenarios():
+            pos = board.position_to_text()
+            for move in board.generate_moves():
+                b = Board(pos)
+                b.make_move(move)
+                live_hash = hash(b)
+                rebuilt = Board(b.position_to_text())
+                rebuilt_hash = hash(rebuilt)
+                if live_hash != rebuilt_hash:
+                    failures.append(
+                        f"Rebuild hash mismatch for gods {b.gods[0].name}/{b.gods[1].name} on move {move}\n"
+                        f"Live:   {live_hash}\n"
+                        f"Rebuilt:{rebuilt_hash}"
+                    )
+
+        if failures:
+            self.fail(f"{len(failures)} hash mismatches found:\n\n" + "\n\n".join(failures))
 ###############################################################################
 #                                RUN TESTS
 ###############################################################################
