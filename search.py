@@ -4,7 +4,8 @@ from typing import Optional, List
 
 from Board import Board
 from Move import Move
-from constants import DOUBLE_NEIGHBORS
+from board_tests import make_position
+from constants import DOUBLE_NEIGHBORS, God
 from evaluate import score_position
 from transposition_table import TranspositionTable
 
@@ -46,6 +47,55 @@ def pick_move(moves: List[Move], start_index: int) -> None:
         moves[start_index], moves[best_idx] = moves[best_idx], moves[start_index]
 
 
+def qsearch(search_info: SearchInfo, alpha: int, beta: int) -> int:
+    search_info.nodes += 1
+
+    if (search_info.nodes % CHECK_EVERY) == 0 and time.time() > search_info.end_time:
+        search_info.quit = True
+        return 0
+
+    state = search_info.board.check_state()
+    if state != 0:
+        return MATE - 1 if state == search_info.board.turn else -MATE + 1
+
+    stand_pat = evaluate(search_info.board)
+    if stand_pat >= beta:
+        return beta
+    if stand_pat > alpha:
+        alpha = stand_pat
+
+    for move in search_info.board.generate_moves():
+        from_h = search_info.board.blocks[move.from_sq]
+        to_h = search_info.board.blocks[move.final_sq]
+
+        # Allow climbs or Pan drop-wins only
+        god_index = 0 if search_info.board.turn == 1 else 1
+        god = search_info.board.gods[god_index]
+
+        is_climb = to_h > from_h
+        is_pan_drop = (
+            god == God.PAN and from_h - to_h >= 2
+        )
+
+        if not (is_climb or is_pan_drop):
+            continue
+
+        search_info.board.make_move(move)
+        score = -qsearch(search_info, -beta, -alpha)
+        search_info.board.unmake_move(move)
+
+        if search_info.quit:
+            return 0
+
+        if score >= beta:
+            return beta
+        if score > alpha:
+            alpha = score
+
+    return alpha
+
+
+
 def search(search_info: SearchInfo, depth: int, ply: int, alpha: int, beta: int, tt: TranspositionTable) -> int:
     search_info.nodes += 1
 
@@ -68,7 +118,7 @@ def search(search_info: SearchInfo, depth: int, ply: int, alpha: int, beta: int,
 
     # Leaf node: return static evaluation.
     if depth == 0:
-        return evaluate(search_info.board)
+        return qsearch(search_info, alpha, beta)
 
     # Probe the transposition table.
     tt_move, tt_score = tt.probe(search_info.board, alpha, beta, depth)
@@ -153,9 +203,24 @@ def get_best_move(board: Board, remaining_time_ms: int, tt: TranspositionTable, 
 
 
 if __name__ == '__main__':
-    p = "0N2N0N0N0N1G1B3N0N1N1N1N0N1B2G2N1N0N0N0N0N0N0N0N0N0280"
+    # p = "0N2N0N0N0N1G1B3N0N1N1N1N0N1B2G2N1N0N0N0N0N0N0N0N0N0280"
+    p = make_position(
+        blocks=[
+            0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0,
+            0, 0, 1, 2, 0,
+            0, 1, 0, 0, 0,
+            0, 2, 2, 3, 0
+        ],
+        gray_workers=(7, 0),
+        blue_workers=(16, 24),
+        turn=1,  # Gray to move
+        god_gray=God.ATLAS,
+        god_blue=God.ATHENA,
+        athena_up=False
+    )
     board = Board(p)
     remaining_time_ms: int = 1000 * 60 * 10
     tt = TranspositionTable()
-    bm = get_best_move(board, remaining_time_ms, tt)
+    bm = get_best_move(board, remaining_time_ms, tt, max_depth=3)
     print(bm.to_text())
