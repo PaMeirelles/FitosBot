@@ -7,7 +7,10 @@ posScore = [-50, -30, -10, -30, -50,
             -30,  10,  30,  10, -30,
             -50, -30, -10, -30, -50]
 
-heightScore = [0, 100, 400, 350]
+h1 = 100
+h2_gap = 300   # h2 = h1 + h2_gap
+h3_gap = -50   # h3 = h2 + h3_gap
+heightScore = [0, h1, h1 + h2_gap, h1 + h2_gap + h3_gap]
 
 sameHeightSupport = [-30, 0, 55]
 nextHeightSupport = [0, 35, 120]

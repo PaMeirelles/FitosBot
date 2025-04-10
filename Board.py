@@ -941,6 +941,7 @@ class Board:
 
             # Option 2: build first, then move (but can't move up)
             prebuild_sqs = self._get_build_sq(from_sq, from_sq)
+            already_in = set()
             for opt_build_sq in prebuild_sqs:
                 if self.blocks[opt_build_sq] == 4:
                     continue
@@ -951,10 +952,11 @@ class Board:
                         continue  # can't move up after building first
                     build_sqs = self._get_build_sq(from_sq, to_sq)
                     for build_sq in build_sqs:
+                        if (from_sq, to_sq, build_sq, opt_build_sq) in already_in:
+                            continue
                         if self.blocks[build_sq] == 3 and build_sq == opt_build_sq:
                             continue
-                        if build_sq < opt_build_sq:
-                            continue  # skip reversed duplicates
+                        already_in.add((from_sq, to_sq, build_sq, opt_build_sq))
                         moves.append(PrometheusMove(from_sq, to_sq, build_sq, optional_build=opt_build_sq))
         return moves
 

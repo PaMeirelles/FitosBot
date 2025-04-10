@@ -13,6 +13,9 @@ MATE: int = 10000
 CHECK_EVERY: int = 4096  # how often we check for time in the search
 WIN: int = 9999
 
+def is_mate(score: int) -> bool:
+    return score > (MATE - 100) or score < (-MATE + 100)
+
 class SearchInfo:
     def __init__(self, board: Board, depth: int, end_time: float) -> None:
         self.board: Board = board            # Board reference
@@ -86,13 +89,9 @@ def search(search_info: SearchInfo, depth: int, ply: int, alpha: int, beta: int,
         pick_move(moves, i)
         move = moves[i]
 
-        # If this move immediately wins, adjust score by ply.
-        if getattr(move, "build", None) == WIN:
-            curr_score = MATE - ply
-        else:
-            search_info.board.make_move(move)
-            curr_score = -search(search_info, depth - 1, ply + 1, -beta, -alpha, tt)
-            search_info.board.unmake_move(move)
+        search_info.board.make_move(move)
+        curr_score = -search(search_info, depth - 1, ply + 1, -beta, -alpha, tt)
+        search_info.board.unmake_move(move)
 
         if curr_score > max_score:
             max_score = curr_score
@@ -125,22 +124,26 @@ def get_best_move(board: Board, remaining_time_ms: int, tt: TranspositionTable, 
     start_time: float = time.time()
     end_time: float = start_time + (thinking_time / 1000.0)
     best_move = None
+    best_score = None
     depth: int = 1
     while True:
         search_info = SearchInfo(board, depth, end_time)
         # Start the ply counter at 0.
         search(search_info, depth, 0, -MATE, MATE, tt)
-        best_move, best_score = tt.probe_pv_move(board)
+        candidate_best_move, candidate_best_score = tt.probe_pv_move(board)
+        if candidate_best_move is not None:
+            best_move = candidate_best_move
+            best_score = candidate_best_score
 
         if search_info.quit:
             break
 
         # Only break out of iterative deepening if a winning mate is found.
-        if best_move and (getattr(best_move, "build", None) == WIN or (best_score is not None and best_score > 9000)):
+        if best_score is not None and is_mate(best_score):
             break
         print(best_move.to_text(), best_score, depth, time.time() - start_time)
 
-        if time.time() > end_time or (max_depth is not None and depth == max_depth):
+        if max_depth is not None and depth == max_depth:
             break
         depth += 1
 
@@ -149,22 +152,9 @@ def get_best_move(board: Board, remaining_time_ms: int, tt: TranspositionTable, 
 
 
 if __name__ == '__main__':
-    positions = \
-        ["0N0N0N0N0N0N0N0N1N0G0B0N0G0N0N0N0N0N0N0N0N0N0N0N0B1290",
-         "0N0N0N0N0N0N0N0N1G0N0B0N0G1N0N0N0N1N0B0N0N0N0N0N0N1291",
-         "0N0N0N0N0N0N0N0N1N1N0N0B0G1G0N0N0N2N0B0N0N0N0N0N0N1290",
-         "0N1N0N0N0N0N0N0B1G1N0N0N1N1G0N0N0N3N0B0N0N0N0N0N0N1291",
-         "0N1N0B0N0N0N1N0N2N1N0N0N1G1G0N0N0N3N0B0N0N0N0N0N0N1290",
-         "0N2N0N0N0N0N1G0B3N1N0N1N1N1G0N0N0N3N0B0N0N0N0N0N0N1290",
-         "0N3N0N0B1N0N1N0G3N1N0N1N2N1G0N0N0N3N0B0N0N0N0N0N0N1290",
-         "0N3N0N0B1N0N1N0G4N1G0N1N3N2N0B0N0N3N0N0N0N0N0N0N0N1290",
-         "0N3N0N0B1N0N1G1N4N1G0N1N3N3N0N0N0N3N0B0N0N0N0N0N0N1291",
-         "0N3N0N0B1N0N1N1G4N1G0N2N3N3N0B0N0N3N1N1N0N0N0N0N0N1290",
-         "0N3N0N0B1N0N1G2N4N1G0N2N4N3N0N0N0N3N1B1N0N0N0N0N0N1290"]
-
-    for p in positions:
-        board = Board(p)
-        remaining_time_ms: int = 1000 * 60 * 10 * 10
-        tt = TranspositionTable()
-        bm = get_best_move(board, remaining_time_ms, tt, max_depth=4)
-    # print(bm.to_text())
+    p = "0N0N0B0G0N0N0N0N0B0N0N0G0N0N0N0N0N0N0N0N0N0N0N0N0N0310"
+    board = Board(p)
+    remaining_time_ms: int = 1000 * 60
+    tt = TranspositionTable()
+    bm = get_best_move(board, remaining_time_ms, tt)
+    print(bm.to_text())
