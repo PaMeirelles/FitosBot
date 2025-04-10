@@ -419,6 +419,44 @@ class TestAthena(unittest.TestCase):
         move_apollo = ApolloMove(from_sq=3, to_sq=8, build_sq=2)
         self.assertFalse(board.move_is_valid(move_apollo))
 
+    def test_opponent_generated_moves_do_not_climb_after_athena_up(self):
+        """
+        After Athena moves up, the opponent should not generate any moves
+        that result in an upward movement.
+        """
+        # Create a board such that upward moves are normally possible for Blue.
+        # Gray will be using Athena and Blue using Apollo.
+        # For example, let Blue have a worker on square 3 at level 0,
+        # with an adjacent square 8 at level 1 which would normally be a climb.
+        blocks = [0] * 25
+        blocks[8] = 1  # Potential upward move for Blue from level 0 -> 1
+        blocks[1] = 1  # making the move upward
+
+        # Set up workers: Gray on squares 0 and 2, Blue on squares 3 and 4.
+        board = create_board(blocks=blocks,
+                             gray_workers=(0, 2),
+                             blue_workers=(3, 4),
+                             turn=1,  # Gray's turn
+                             god_gray=God.ATHENA,
+                             god_blue=God.APOLLO)
+
+        # Adjust blocks so that an up move is available for Gray as Athena.
+        # For example, move Gray's worker from square 0 (at level 0) to square 1.
+        move_athena = AthenaMove(from_sq=0, to_sq=1, build_sq=5)
+        self.assertTrue(board.move_is_valid(move_athena), "Athena move should be valid")
+        board.make_move(move_athena)
+        self.assertTrue(board.prevent_up_next_turn)
+        # After Athena goes up, the opponent (Blue) now gets the move.
+        # Athena's effect should prevent any move that climbs upward.
+        blue_moves = board.generate_moves()  # should generate moves for Blue (since board.turn is now Blue)
+
+        for move in blue_moves:
+            origin = move.from_sq
+            # For each moving move, ensure no upward movement occurs.
+            self.assertTrue(
+                board.blocks[move.final_sq] <= board.blocks[origin],
+                f"Opponent move {move} climbs from level {board.blocks[origin]} to {board.blocks[move.final_sq]}"
+            )
     def test_athena_opponent_no_move_loses(self):
         """
         If Athena's power forbids the opponent from moving up,

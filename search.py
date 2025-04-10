@@ -146,15 +146,16 @@ def get_best_move(board: Board, remaining_time_ms: int, tt: TranspositionTable, 
         if max_depth is not None and depth == max_depth:
             break
         depth += 1
+        if depth == 100: break
 
     return best_move
 
 
 
 if __name__ == '__main__':
-    p = "0N0N0B0G0N0N0N0N0B0N0N0G0N0N0N0N0N0N0N0N0N0N0N0N0N0310"
+    p = "0N2N0N0N0N1G1B3N0N1N1N1N0N1B2G2N1N0N0N0N0N0N0N0N0N0280"
     board = Board(p)
-    remaining_time_ms: int = 1000 * 60
+    remaining_time_ms: int = 1000 * 60 * 10
     tt = TranspositionTable()
     bm = get_best_move(board, remaining_time_ms, tt)
     print(bm.to_text())

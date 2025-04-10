@@ -229,7 +229,6 @@ class Board:
         handler(move)
 
     def make_move(self, move: Move) -> None:
-
         hash(self)
 
         current_player = 0 if self.turn == 1 else 1
@@ -668,243 +667,189 @@ class Board:
     def _is_ally_worker(self, sq: int) -> bool:
         return not self._is_opponent_worker(sq)
 
-    def _generate_moves_apollo(self):
-        worker_index = self._get_worker_index()
-        moves = []
+    from collections import deque
 
-        for wi in worker_index:
-            from_sq = wi
+    def _generate_moves_apollo(self):
+        moves = []
+        for from_sq in self._get_worker_index():
             for to_sq in NEIGHBOURS[from_sq]:
+                if self.prevent_up_next_turn and self.blocks[to_sq] > self.blocks[from_sq]:
+                    continue
                 occupant = self._which_worker_is_here(to_sq)
-                if (self.blocks[to_sq] == 4 or (occupant is not None and self._is_ally_worker(occupant)) or
+                if (self.blocks[to_sq] == 4 or
+                        (occupant is not None and self._is_ally_worker(occupant)) or
                         self.blocks[to_sq] - self.blocks[from_sq] > 1):
                     continue
                 for build_sq in NEIGHBOURS[to_sq]:
+                    if build_sq == to_sq:
+                        continue
                     if build_sq == from_sq:
-                        if occupant is not None:
-                            continue
-                        if self.blocks[build_sq] == 4:
+                        if occupant is not None or self.blocks[build_sq] == 4:
                             continue
                     else:
                         if not self.is_free(build_sq):
                             continue
-                    if build_sq == to_sq:
-                        continue
                     moves.append(ApolloMove(from_sq, to_sq, build_sq))
         return moves
 
     def _generate_moves_artemis(self):
-        worker_index = self._get_worker_index()
-
-        moves = []
-        reached = set()
-
-        for wi in worker_index:
-            from_sq = wi
+        moves, reached = [], set()
+        for from_sq in self._get_worker_index():
             for to_sq in NEIGHBOURS[from_sq]:
-                if not self.is_free(to_sq) or self.blocks[to_sq] - self.blocks[from_sq] > 1:
+                if (self.prevent_up_next_turn and self.blocks[to_sq] > self.blocks[from_sq] or
+                        not self.is_free(to_sq) or
+                        self.blocks[to_sq] - self.blocks[from_sq] > 1):
                     continue
                 reached.add((from_sq, to_sq))
-                build_sqs = self._get_build_sq(from_sq, to_sq)
-                for build_sq in build_sqs:
+                for build_sq in self._get_build_sq(from_sq, to_sq):
                     moves.append(ArtemisMove(from_sq, to_sq, build_sq))
-                for second_move_sq in NEIGHBOURS[to_sq]:
-                    if (not self.is_free(second_move_sq) or self.blocks[second_move_sq] - self.blocks[to_sq] > 1 or
-                            second_move_sq == from_sq):
+                for second_sq in NEIGHBOURS[to_sq]:
+                    if (self.prevent_up_next_turn and self.blocks[second_sq] > self.blocks[from_sq] or
+                            not self.is_free(second_sq) or
+                            self.blocks[second_sq] - self.blocks[to_sq] > 1 or
+                            second_sq == from_sq or
+                            (from_sq, second_sq) in reached):
                         continue
-                    if (from_sq, second_move_sq) in reached:
-                        continue
-                    reached.add((from_sq, second_move_sq))
-                    build_sqs = self._get_build_sq(from_sq, second_move_sq)
-                    for build_sq in build_sqs:
-                        moves.append(ArtemisMove(from_sq=from_sq, to_sq=second_move_sq, build_sq=build_sq, mid_sq=to_sq))
+                    reached.add((from_sq, second_sq))
+                    for build_sq in self._get_build_sq(from_sq, second_sq):
+                        moves.append(ArtemisMove(from_sq, second_sq, build_sq, mid_sq=to_sq))
         return moves
 
     def _generate_moves_atlas(self):
-        worker_index = self._get_worker_index()
-
         moves = []
-
-        for wi in worker_index:
-            from_sq = wi
+        for from_sq in self._get_worker_index():
             for to_sq in NEIGHBOURS[from_sq]:
-                if not self.is_free(to_sq) or self.blocks[to_sq] - self.blocks[from_sq] > 1:
+                if (self.prevent_up_next_turn and self.blocks[to_sq] > self.blocks[from_sq] or
+                        not self.is_free(to_sq) or
+                        self.blocks[to_sq] - self.blocks[from_sq] > 1):
                     continue
-                build_sqs = self._get_build_sq(from_sq, to_sq)
-                for build_sq in build_sqs:
-                    from_h = self.blocks[build_sq]
-                    moves.append(AtlasMove(from_sq, to_sq, build_sq, False, from_h))
-                    if self.blocks[build_sq] != 4:
-                        moves.append(AtlasMove(from_sq, to_sq, build_sq, True, from_h))
+                for build_sq in self._get_build_sq(from_sq, to_sq):
+                    h = self.blocks[build_sq]
+                    moves.append(AtlasMove(from_sq, to_sq, build_sq, False, h))
+                    if h != 4:
+                        moves.append(AtlasMove(from_sq, to_sq, build_sq, True, h))
         return moves
 
     def _generate_moves_demeter(self):
-        worker_index = self._get_worker_index()
-
         moves = []
-
-        for wi in worker_index:
-            from_sq = wi
+        for from_sq in self._get_worker_index():
             for to_sq in NEIGHBOURS[from_sq]:
-                if not self.is_free(to_sq) or self.blocks[to_sq] - self.blocks[from_sq] > 1:
+                if (self.prevent_up_next_turn and self.blocks[to_sq] > self.blocks[from_sq] or
+                        not self.is_free(to_sq) or
+                        self.blocks[to_sq] - self.blocks[from_sq] > 1):
                     continue
                 build_sqs = self._get_build_sq(from_sq, to_sq)
-                for i, build_sq_1 in enumerate(build_sqs):
-                    for build_sq_2 in build_sqs[i:]:
-                        if build_sq_1 == build_sq_2:
-                            moves.append(DemeterMove(from_sq, to_sq, build_sq_1))
-                        else:
-                            moves.append(DemeterMove(from_sq, to_sq, build_sq_1, build_sq_2))
-
+                for i, b1 in enumerate(build_sqs):
+                    for b2 in build_sqs[i:]:
+                        moves.append(DemeterMove(from_sq, to_sq, b1) if b1 == b2
+                                     else DemeterMove(from_sq, to_sq, b1, b2))
         return moves
 
     def _generate_moves_hephaestus(self):
-        worker_index = self._get_worker_index()
-
         moves = []
-
-        for wi in worker_index:
-            from_sq = wi
+        for from_sq in self._get_worker_index():
             for to_sq in NEIGHBOURS[from_sq]:
-                if not self.is_free(to_sq) or self.blocks[to_sq] - self.blocks[from_sq] > 1:
+                if (self.prevent_up_next_turn and self.blocks[to_sq] > self.blocks[from_sq] or
+                        not self.is_free(to_sq) or
+                        self.blocks[to_sq] - self.blocks[from_sq] > 1):
                     continue
-                build_sqs = self._get_build_sq(from_sq, to_sq)
-                for build_sq in build_sqs:
+                for build_sq in self._get_build_sq(from_sq, to_sq):
                     moves.append(HephaestusMove(from_sq, to_sq, build_sq))
                     if self.blocks[build_sq] < 2:
                         moves.append(HephaestusMove(from_sq, to_sq, build_sq, build_sq))
         return moves
 
     def _generate_moves_pan(self):
-        worker_index = self._get_worker_index()
-
         moves = []
-
-        for wi in worker_index:
-            from_sq = wi
+        for from_sq in self._get_worker_index():
             for to_sq in NEIGHBOURS[from_sq]:
-                if not self.is_free(to_sq) or self.blocks[to_sq] - self.blocks[from_sq] > 1:
+                if (self.prevent_up_next_turn and self.blocks[to_sq] > self.blocks[from_sq] or
+                        not self.is_free(to_sq) or
+                        self.blocks[to_sq] - self.blocks[from_sq] > 1):
                     continue
-                build_sqs = self._get_build_sq(from_sq, to_sq)
-                for build_sq in build_sqs:
+                for build_sq in self._get_build_sq(from_sq, to_sq):
                     moves.append(PanMove(from_sq, to_sq, build_sq))
         return moves
 
-    from collections import deque
-
     def _generate_moves_hermes(self):
-        worker_index = self._get_worker_index()
         moves = []
-
-        for wi in worker_index:
-            from_sq = wi
-            from_h = self.blocks[from_sq]
-
-            # Single-step normal moves
+        for from_sq in self._get_worker_index():
+            h = self.blocks[from_sq]
             for to_sq in NEIGHBOURS[from_sq]:
-                if not self.is_free(to_sq) or self.blocks[to_sq] - from_h > 1:
+                if (self.prevent_up_next_turn and self.blocks[to_sq] > h or
+                        not self.is_free(to_sq) or
+                        self.blocks[to_sq] - h > 1):
                     continue
-                build_sqs = self._get_build_sq(from_sq, to_sq)
-                for build_sq in build_sqs:
+                for build_sq in self._get_build_sq(from_sq, to_sq):
                     moves.append(HermesMove(from_sq, [to_sq], build_sq))
-
-            # No-move (standing still) is allowed: build adjacent to from_sq
-            build_sqs = self._get_build_sq(from_sq, from_sq)
-            for build_sq in build_sqs:
+            for build_sq in self._get_build_sq(from_sq, from_sq):
                 moves.append(HermesMove(from_sq, [], build_sq))
-
-            # Multi-step BFS on flat (ground-level) terrain.
-            # Instead of a global path list, we enqueue each branch’s path.
-            visited = set([from_sq])
-            # Each entry is (current_square, path) with 'path' being a list of moves (excluding from_sq)
-            queue = deque([(from_sq, [])])
-
-            while queue:
-                current_sq, path = queue.popleft()
-                for nei in NEIGHBOURS[current_sq]:
-                    if nei in visited or not self.is_free(nei):
+            visited, q = {from_sq}, deque([(from_sq, [])])
+            while q:
+                cur, path = q.popleft()
+                for nei in NEIGHBOURS[cur]:
+                    if (nei in visited or
+                            not self.is_free(nei) or
+                            self.blocks[nei] != h):
                         continue
-                    if self.blocks[nei] != from_h:
-                        continue
-                    # Generate a new path for this branch
                     new_path = path + [nei]
-                    build_sqs = self._get_build_sq(from_sq, nei)
-                    for build_sq in build_sqs:
+                    for build_sq in self._get_build_sq(from_sq, nei):
                         moves.append(HermesMove(from_sq, new_path, build_sq))
-                    queue.append((nei, new_path))
+                    q.append((nei, new_path))
                     visited.add(nei)
-
         return moves
 
     def _generate_moves_minotaur(self):
-        worker_index = self._get_worker_index()
         moves = []
-
-        for wi in worker_index:
-            from_sq = wi
-            from_h = self.blocks[from_sq]
-
+        for from_sq in self._get_worker_index():
+            h = self.blocks[from_sq]
             for to_sq in NEIGHBOURS[from_sq]:
+                if self.prevent_up_next_turn and self.blocks[to_sq] > h:
+                    continue
                 occupant = self._which_worker_is_here(to_sq)
                 if occupant is not None and self._is_ally_worker(occupant):
                     continue
-                if self.blocks[to_sq] == 4 or self.blocks[to_sq] - from_h > 1:
+                if self.blocks[to_sq] == 4 or self.blocks[to_sq] - h > 1:
                     continue
                 push_sq = None
                 if occupant is not None and self._is_opponent_worker(occupant):
-                    # compute push destination
                     push_sq = _calculate_push_square(from_sq, to_sq)
-
-                    if push_sq is None:
+                    if (push_sq is None or
+                            not self.is_free(push_sq) or
+                            self.blocks[push_sq] == 4):
                         continue
-                    if not self.is_free(push_sq):
-                        continue
-                    if self.blocks[push_sq] == 4:
-                        continue
-
-                build_sqs = self._get_build_sq(from_sq, to_sq)
-                for build_sq in build_sqs:
+                for build_sq in self._get_build_sq(from_sq, to_sq):
                     if push_sq is not None and push_sq == build_sq:
                         continue
                     moves.append(MinotaurMove(from_sq, to_sq, build_sq, push_sq is not None))
-
         return moves
 
     def _generate_moves_prometheus(self):
-        worker_index = self._get_worker_index()
         moves = []
-
-        for wi in worker_index:
-            from_sq = wi
-            from_h = self.blocks[from_sq]
-
-            # Option 1: normal move without optional build
+        for from_sq in self._get_worker_index():
+            h = self.blocks[from_sq]
             for to_sq in NEIGHBOURS[from_sq]:
-                if not self.is_free(to_sq) or self.blocks[to_sq] - from_h > 1:
+                if (self.prevent_up_next_turn and self.blocks[to_sq] > h or
+                        not self.is_free(to_sq) or
+                        self.blocks[to_sq] - h > 1):
                     continue
-                build_sqs = self._get_build_sq(from_sq, to_sq)
-                for build_sq in build_sqs:
+                for build_sq in self._get_build_sq(from_sq, to_sq):
                     moves.append(PrometheusMove(from_sq, to_sq, build_sq))
-
-            # Option 2: build first, then move (but can't move up)
-            prebuild_sqs = self._get_build_sq(from_sq, from_sq)
-            already_in = set()
-            for opt_build_sq in prebuild_sqs:
-                if self.blocks[opt_build_sq] == 4:
+            seen = set()
+            for opt in self._get_build_sq(from_sq, from_sq):
+                if self.blocks[opt] == 4:
                     continue
                 for to_sq in NEIGHBOURS[from_sq]:
-                    if not self.is_free(to_sq):
+                    if (not self.is_free(to_sq) or
+                            self.prevent_up_next_turn and self.blocks[to_sq] > h or
+                            self.blocks[to_sq] + (opt == to_sq) > h):
                         continue
-                    if self.blocks[to_sq] + (opt_build_sq == to_sq) > from_h:
-                        continue  # can't move up after building first
-                    build_sqs = self._get_build_sq(from_sq, to_sq)
-                    for build_sq in build_sqs:
-                        if (from_sq, to_sq, build_sq, opt_build_sq) in already_in:
+                    for build_sq in self._get_build_sq(from_sq, to_sq):
+                        key = (from_sq, to_sq, build_sq, opt)
+                        if key in seen or (self.blocks[build_sq] == 3 and build_sq == opt):
                             continue
-                        if self.blocks[build_sq] == 3 and build_sq == opt_build_sq:
-                            continue
-                        already_in.add((from_sq, to_sq, build_sq, opt_build_sq))
-                        moves.append(PrometheusMove(from_sq, to_sq, build_sq, optional_build=opt_build_sq))
+                        seen.add(key)
+                        moves.append(PrometheusMove(from_sq, to_sq, build_sq, optional_build=opt))
         return moves
 
     def generate_moves(self):
@@ -1049,6 +994,7 @@ class Board:
         active_worker = self._find_active_worker_undo(move.to_sq)
         self._move_worker_back(active_worker, move.from_sq)
         self.prevent_up_next_turn = False
+        self.last_move_height_diff = 0
 
     def _undo_atlas_move(self, move: AtlasMove) -> None:
         active_worker = self._find_active_worker_undo(move.to_sq)
