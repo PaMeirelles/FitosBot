@@ -64,7 +64,9 @@ def qsearch(search_info: SearchInfo, alpha: int, beta: int) -> int:
     if stand_pat > alpha:
         alpha = stand_pat
 
+    played = set()
     for move in search_info.board.generate_moves():
+        if (move.from_sq, move.final_sq) in played: continue
         from_h = search_info.board.blocks[move.from_sq]
         to_h = search_info.board.blocks[move.final_sq]
 
@@ -81,6 +83,7 @@ def qsearch(search_info: SearchInfo, alpha: int, beta: int) -> int:
             continue
 
         search_info.board.make_move(move)
+        played.add((move.from_sq, move.final_sq))
         score = -qsearch(search_info, -beta, -alpha)
         search_info.board.unmake_move(move)
 
@@ -203,24 +206,10 @@ def get_best_move(board: Board, remaining_time_ms: int, tt: TranspositionTable, 
 
 
 if __name__ == '__main__':
-    # p = "0N2N0N0N0N1G1B3N0N1N1N1N0N1B2G2N1N0N0N0N0N0N0N0N0N0280"
-    p = make_position(
-        blocks=[
-            0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0,
-            0, 0, 1, 2, 0,
-            0, 1, 0, 0, 0,
-            0, 2, 2, 3, 0
-        ],
-        gray_workers=(7, 0),
-        blue_workers=(16, 24),
-        turn=1,  # Gray to move
-        god_gray=God.ATLAS,
-        god_blue=God.ATHENA,
-        athena_up=False
-    )
+    p = "0N1N0N0N0N0N0B0N0G1N0N0N0G2N0N1N0N0B0N0N0N0N0N0N0N1100"
+
     board = Board(p)
     remaining_time_ms: int = 1000 * 60 * 10
     tt = TranspositionTable()
-    bm = get_best_move(board, remaining_time_ms, tt, max_depth=3)
+    bm = get_best_move(board, remaining_time_ms, tt, max_depth=1)
     print(bm.to_text())
