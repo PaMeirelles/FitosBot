@@ -872,6 +872,14 @@ class TestBoardHashing(unittest.TestCase):
 
         if failures:
             self.fail(f"{len(failures)} hash mismatches found:\n\n" + "\n\n".join(failures))
+
+
+class TestGeneratedMovesAreValid(unittest.TestCase):
+    def test_generated_moves_valid(self):
+        for board in TestBoardHashing._stress_scenarios():
+            for move in board.generate_moves():
+                self.assertTrue(board.move_is_valid(move), f"{board.gods[0].name}/{board.gods[1].name} invalid move {move}")
+
 ###############################################################################
 #                                RUN TESTS
 ###############################################################################

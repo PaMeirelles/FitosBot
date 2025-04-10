@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Type, TypeVar, List, Optional
 from dataclasses import dataclass, field
 
+from constants import God  # e.g. God.APOLLO, God.ARTEMIS, etc.
 
 def text_to_square(square_text):
     row = ord(square_text[0]) - ord('a')
@@ -22,7 +23,8 @@ T = TypeVar('T', bound='Move')
 class Move(ABC):
     from_sq: int
     had_athena_flag: bool = field(default=False, init=False)
-    score:int = field(init=False, default=0)
+    score: int = field(init=False, default=0)
+    god: Optional[God] = field(init=False, default=None)
 
     @property
     @abstractmethod
@@ -38,10 +40,14 @@ class Move(ABC):
     def from_text(cls: Type[T], move_text: str) -> T:
         pass
 
+# --- ApolloMove ---
 @dataclass
 class ApolloMove(Move):
     to_sq: int
     build_sq: int
+
+    def __post_init__(self):
+        self.god = God.APOLLO
 
     @property
     def final_sq(self) -> int:
@@ -58,11 +64,15 @@ class ApolloMove(Move):
             build_sq=text_to_square(move_text[4:6]),
         )
 
+# --- ArtemisMove ---
 @dataclass
 class ArtemisMove(Move):
     to_sq: int
     build_sq: int
     mid_sq: Optional[int] = None
+
+    def __post_init__(self):
+        self.god = God.ARTEMIS
 
     @property
     def final_sq(self) -> int:
@@ -94,10 +104,14 @@ class ArtemisMove(Move):
         else:
             raise ValueError("Move text must be 6 or 8 characters long")
 
+# --- HermesMove ---
 @dataclass
 class HermesMove(Move):
     squares: List[int]
     build_sq: int
+
+    def __post_init__(self):
+        self.god = God.HERMES
 
     @property
     def final_sq(self) -> int:
@@ -120,11 +134,15 @@ class HermesMove(Move):
         squares = [text_to_square(middle[i:i+2]) for i in range(0, len(middle), 2)]
         return cls(from_sq=from_sq, squares=squares, build_sq=build_sq)
 
+# --- DemeterMove ---
 @dataclass
 class DemeterMove(Move):
     to_sq: int
     build_sq_1: int
     build_sq_2: Optional[int] = None
+
+    def __post_init__(self):
+        self.god = God.DEMETER
 
     @property
     def final_sq(self) -> int:
@@ -158,19 +176,27 @@ class DemeterMove(Move):
         else:
             raise ValueError("Demeter move text must be 6 or 8 characters")
 
+# --- HephaestusMove ---
 @dataclass
 class HephaestusMove(DemeterMove):
-    pass
+    def __post_init__(self):
+        self.god = God.HEPHAESTUS
 
+# --- PanMove ---
 @dataclass
 class PanMove(ApolloMove):
-    pass
+    def __post_init__(self):
+        self.god = God.PAN
 
+# --- PrometheusMove ---
 @dataclass
 class PrometheusMove(Move):
     to_sq: int
     build_sq: int
     optional_build: Optional[int] = None
+
+    def __post_init__(self):
+        self.god = God.PROMETHEUS
 
     @property
     def final_sq(self) -> int:
@@ -204,21 +230,30 @@ class PrometheusMove(Move):
         else:
             raise ValueError("Prometheus move text must be 6 or 8 characters")
 
+# --- AthenaMove ---
 @dataclass
 class AthenaMove(ApolloMove):
-    pass
+    def __post_init__(self):
+        self.god = God.ATHENA
 
+# --- MinotaurMove ---
 @dataclass
 class MinotaurMove(ApolloMove):
-    pushed: bool=False
-    pass
+    pushed: bool = False
 
+    def __post_init__(self):
+        self.god = God.MINOTAUR
+
+# --- AtlasMove ---
 @dataclass
 class AtlasMove(Move):
     to_sq: int
     build_sq: int
     dome: bool
-    orig_h:Optional[int]=None
+    orig_h: Optional[int] = None
+
+    def __post_init__(self):
+        self.god = God.ATLAS
 
     @property
     def final_sq(self) -> int:

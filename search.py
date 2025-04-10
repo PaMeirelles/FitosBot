@@ -141,7 +141,7 @@ def get_best_move(board: Board, remaining_time_ms: int, tt: TranspositionTable, 
         # Only break out of iterative deepening if a winning mate is found.
         if best_score is not None and is_mate(best_score):
             break
-        print(best_move.to_text(), best_score, depth, time.time() - start_time)
+        # print(best_move.to_text(), best_score, depth, time.time() - start_time)
 
         if max_depth is not None and depth == max_depth:
             break

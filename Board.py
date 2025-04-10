@@ -6,25 +6,7 @@ from Move import Move, ApolloMove, ArtemisMove, AthenaMove, AtlasMove, DemeterMo
     PrometheusMove
 
 
-###############################################################################
-# Board Class with Full God Logic
-###############################################################################
 
-def _god_move_match(god: God, move: Move) -> bool:
-    """Quick check that (God -> Move type) pairing is correct at a class level."""
-    god_to_move_type = {
-        God.APOLLO: ApolloMove,
-        God.ARTEMIS: ArtemisMove,
-        God.ATHENA: AthenaMove,
-        God.ATLAS: AtlasMove,
-        God.DEMETER: DemeterMove,
-        God.HEPHAESTUS: HephaestusMove,
-        God.HERMES: HermesMove,
-        God.MINOTAUR: MinotaurMove,
-        God.PAN: PanMove,
-        God.PROMETHEUS: PrometheusMove,
-    }
-    return isinstance(move, god_to_move_type.get(god, type(None)))
 
 ###############################################################################
 # small helper
@@ -196,11 +178,9 @@ class Board:
         current_player = 0 if self.turn == 1 else 1
         current_god = self.gods[current_player]
 
-        # If the Move object doesn't correspond to this player's god, fail immediately:
-        if not _god_move_match(current_god, move):
+        if move.god != current_god:
             return False
 
-        # Before special checks, ensure the chosen worker is indeed theirs:
         if not self._worker_belongs_to_current_player(move.from_sq):
             return False
 
@@ -212,55 +192,44 @@ class Board:
             if self._attempts_to_move_up(move):
                 return False
 
-        # Now do god-specific checks:
-        if isinstance(move, ApolloMove) and current_god == God.APOLLO:
-            return self._apollo_move_is_valid(move)
-        elif isinstance(move, ArtemisMove) and current_god == God.ARTEMIS:
-            return self._artemis_move_is_valid(move)
-        elif isinstance(move, AthenaMove) and current_god == God.ATHENA:
-            return self._athena_move_is_valid(move)
-        elif isinstance(move, AtlasMove) and current_god == God.ATLAS:
-            return self._atlas_move_is_valid(move)
-        elif isinstance(move, DemeterMove) and current_god == God.DEMETER:
-            return self._demeter_move_is_valid(move)
-        elif isinstance(move, HephaestusMove) and current_god == God.HEPHAESTUS:
-            return self._hephaestus_move_is_valid(move)
-        elif isinstance(move, HermesMove) and current_god == God.HERMES:
-            return self._hermes_move_is_valid(move)
-        elif isinstance(move, MinotaurMove) and current_god == God.MINOTAUR:
-            return self._minotaur_move_is_valid(move)
-        elif isinstance(move, PanMove) and current_god == God.PAN:
-            return self._pan_move_is_valid(move)
-        elif isinstance(move, PrometheusMove) and current_god == God.PROMETHEUS:
-            return self._prometheus_move_is_valid(move)
+        god_validators = {
+            God.APOLLO: self._apollo_move_is_valid,
+            God.ARTEMIS: self._artemis_move_is_valid,
+            God.ATHENA: self._athena_move_is_valid,
+            God.ATLAS: self._atlas_move_is_valid,
+            God.DEMETER: self._demeter_move_is_valid,
+            God.HEPHAESTUS: self._hephaestus_move_is_valid,
+            God.HERMES: self._hermes_move_is_valid,
+            God.MINOTAUR: self._minotaur_move_is_valid,
+            God.PAN: self._pan_move_is_valid,
+            God.PROMETHEUS: self._prometheus_move_is_valid,
+        }
 
-        # If none matched, it's invalid
-        return False
+        validator = god_validators.get(current_god)
+        if validator is None:
+            return False
+        return validator(move)
 
     def _make_move_for_god(self, current_god: God, move: Move):
         god_move_handlers = {
-            God.APOLLO: (ApolloMove, self._apollo_make_move),
-            God.ARTEMIS: (ArtemisMove, self._artemis_make_move),
-            God.ATHENA: (AthenaMove, self._athena_make_move),
-            God.ATLAS: (AtlasMove, self._atlas_make_move),
-            God.DEMETER: (DemeterMove, self._demeter_make_move),
-            God.HEPHAESTUS: (HephaestusMove, self._hephaestus_make_move),
-            God.HERMES: (HermesMove, self._hermes_make_move),
-            God.MINOTAUR: (MinotaurMove, self._minotaur_make_move),
-            God.PAN: (PanMove, self._pan_make_move),
-            God.PROMETHEUS: (PrometheusMove, self._prometheus_make_move),
+            God.APOLLO: self._apollo_make_move,
+            God.ARTEMIS: self._artemis_make_move,
+            God.ATHENA: self._athena_make_move,
+            God.ATLAS: self._atlas_make_move,
+            God.DEMETER: self._demeter_make_move,
+            God.HEPHAESTUS: self._hephaestus_make_move,
+            God.HERMES: self._hermes_make_move,
+            God.MINOTAUR: self._minotaur_make_move,
+            God.PAN: self._pan_make_move,
+            God.PROMETHEUS: self._prometheus_make_move,
         }
-
-        move_class, handler = god_move_handlers.get(current_god, (None, None))
-        if move_class and isinstance(move, move_class):
-            handler(move)
-        else:
-            raise Exception("Unrecognized god/move combination in make_move")
+        handler = god_move_handlers.get(current_god)
+        if handler is None:
+            raise Exception(f"No move handler for god {current_god}")
+        handler(move)
 
     def make_move(self, move: Move) -> None:
-        """Perform the actual move, applying the correct god's special logic."""
-        if not self.move_is_valid(move):
-            raise Exception("Invalid move")
+
         hash(self)
 
         current_player = 0 if self.turn == 1 else 1
@@ -674,7 +643,7 @@ class Board:
     def _get_build_sq(self, from_sq: int, to_sq: int) -> List[int]:
         sq = []
         for build_sq in NEIGHBOURS[to_sq]:
-            if not self.is_free(build_sq) and build_sq != from_sq:
+            if not self.is_free(build_sq) and (build_sq != from_sq or from_sq == to_sq):
                 continue
             if build_sq == to_sq:
                 continue
@@ -802,7 +771,8 @@ class Board:
                 build_sqs = self._get_build_sq(from_sq, to_sq)
                 for build_sq in build_sqs:
                     moves.append(HephaestusMove(from_sq, to_sq, build_sq))
-                    moves.append(HephaestusMove(from_sq, to_sq, build_sq, build_sq))
+                    if self.blocks[build_sq] < 2:
+                        moves.append(HephaestusMove(from_sq, to_sq, build_sq, build_sq))
         return moves
 
     def _generate_moves_pan(self):
@@ -820,6 +790,7 @@ class Board:
                     moves.append(PanMove(from_sq, to_sq, build_sq))
         return moves
 
+    from collections import deque
 
     def _generate_moves_hermes(self):
         worker_index = self._get_worker_index()
@@ -837,29 +808,32 @@ class Board:
                 for build_sq in build_sqs:
                     moves.append(HermesMove(from_sq, [to_sq], build_sq))
 
-            # no-move
+            # No-move (standing still) is allowed: build adjacent to from_sq
             build_sqs = self._get_build_sq(from_sq, from_sq)
             for build_sq in build_sqs:
                 moves.append(HermesMove(from_sq, [], build_sq))
 
-            # Multi-step BFS on flat terrain
+            # Multi-step BFS on flat (ground-level) terrain.
+            # Instead of a global path list, we enqueue each branch’s path.
             visited = set([from_sq])
-            queue = deque([from_sq])
-            path = []
+            # Each entry is (current_square, path) with 'path' being a list of moves (excluding from_sq)
+            queue = deque([(from_sq, [])])
 
             while queue:
-                current_sq = queue.popleft()
-                path.append(current_sq)
+                current_sq, path = queue.popleft()
                 for nei in NEIGHBOURS[current_sq]:
                     if nei in visited or not self.is_free(nei):
                         continue
                     if self.blocks[nei] != from_h:
                         continue
+                    # Generate a new path for this branch
+                    new_path = path + [nei]
                     build_sqs = self._get_build_sq(from_sq, nei)
                     for build_sq in build_sqs:
-                        moves.append(HermesMove(from_sq, path[1:], build_sq))  # exclude from_sq
-                    queue.append(nei)
+                        moves.append(HermesMove(from_sq, new_path, build_sq))
+                    queue.append((nei, new_path))
                     visited.add(nei)
+
         return moves
 
     def _generate_moves_minotaur(self):
@@ -921,7 +895,7 @@ class Board:
                 for to_sq in NEIGHBOURS[from_sq]:
                     if not self.is_free(to_sq):
                         continue
-                    if self.blocks[to_sq] > from_h:
+                    if self.blocks[to_sq] + (opt_build_sq == to_sq) > from_h:
                         continue  # can't move up after building first
                     build_sqs = self._get_build_sq(from_sq, to_sq)
                     for build_sq in build_sqs:
@@ -951,9 +925,8 @@ class Board:
         raw_moves = dispatch.get(god)()
         final_moves = []
         for move in raw_moves:
-            if self.move_is_valid(move):
-                move.had_athena_flag = self.prevent_up_next_turn
-                final_moves.append(move)
+            move.had_athena_flag = self.prevent_up_next_turn
+            final_moves.append(move)
         return final_moves
 
     def unmake_move(self, move: Move) -> None:
@@ -969,36 +942,26 @@ class Board:
         current_player = 0 if self.turn == 1 else 1
         god = self.gods[current_player]
 
-        god_to_move_type = {
-            God.APOLLO: ApolloMove,
-            God.ARTEMIS: ArtemisMove,
-            God.ATHENA: AthenaMove,
-            God.ATLAS: AtlasMove,
-            God.DEMETER: DemeterMove,
-            God.HEPHAESTUS: HephaestusMove,
-            God.HERMES: HermesMove,
-            God.MINOTAUR: MinotaurMove,
-            God.PAN: PanMove,
-            God.PROMETHEUS: PrometheusMove,
+        if move.god != god:
+            raise Exception(f"Move god {move.god} does not match current god {god}")
+
+        # Now dispatch undo using the god field:
+        god_undo_handlers = {
+            God.APOLLO: self._undo_apollo_move,
+            God.ARTEMIS: self._undo_artemis_move,
+            God.ATHENA: self._undo_athena_move,
+            God.ATLAS: self._undo_atlas_move,
+            God.DEMETER: self._undo_demeter_move,
+            God.HEPHAESTUS: self._undo_hephaestus_move,
+            God.HERMES: self._undo_hermes_move,
+            God.MINOTAUR: self._undo_minotaur_move,
+            God.PAN: self._undo_pan_move,
+            God.PROMETHEUS: self._undo_prometheus_move,
         }
 
-        if not isinstance(move, god_to_move_type[god]):
-            raise Exception(f"Move type {type(move).__name__} does not match god {god.name}")
-
-        move_type_to_undo_fn = {
-            ApolloMove: self._undo_apollo_move,
-            ArtemisMove: self._undo_artemis_move,
-            AthenaMove: self._undo_athena_move,
-            AtlasMove: self._undo_atlas_move,
-            DemeterMove: self._undo_demeter_move,
-            HephaestusMove: self._undo_hephaestus_move,
-            HermesMove: self._undo_hermes_move,
-            MinotaurMove: self._undo_minotaur_move,
-            PanMove: self._undo_pan_move,
-            PrometheusMove: self._undo_prometheus_move,
-        }
-
-        undo_fn = move_type_to_undo_fn.get(type(move))
+        undo_fn = god_undo_handlers.get(god)
+        if undo_fn is None:
+            raise Exception(f"No undo handler for god {god}")
         if undo_fn is None:
             raise Exception(f"No undo function for move type {type(move).__name__}")
 
