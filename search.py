@@ -206,10 +206,10 @@ def get_best_move(board: Board, remaining_time_ms: int, tt: TranspositionTable, 
 
 
 if __name__ == '__main__':
-    p = "0N0N0N0N0N0N1N0N0N0N0B1G0G0N0N0N3N3N0B0N0N3N3N0N0N0980"
+    p = "0N0G0G0N0N0N0N0B0N0N0B0N0N0N0N0N0N0N0N0N0N0N0N0N0N0720"
 
     board = Board(p)
-    remaining_time_ms: int = 1000 * 40
+    remaining_time_ms: int = 1000 * 60
     tt = TranspositionTable()
     bm = get_best_move(board, remaining_time_ms, tt)
     pv_line = tt.probe_pv_line(board)

@@ -14,7 +14,8 @@ class Parameters:
         self.sameHeightSupport = [0, sh1, sh1 + sh2]
         self.nextHeightSupport = [0, nh1, nh1 + nh2]
 
-PARAMS = Parameters(25, 260, 70, 25, 90, 40)
+PARAMS = Parameters(20, 250, 60, 30, 80, 40)
+# 20 250 60 30 80 40
 
 
 def score_position(b: Board, parameters:Parameters=PARAMS) -> int:
