@@ -82,3 +82,17 @@ class TranspositionTable:
         if entry is not None and entry.hash_key == key:
             return entry.move, entry.score
         return None, None
+
+    def probe_pv_line(self, board):
+        pv_line = []
+        while True:
+            key = hash(board)
+            index = key % self.num_entries
+            entry = self.table[index]
+            if entry is None or entry.hash_key != key or entry.move is None:
+                break
+            pv_line.append(entry.move)
+            board.make_move(entry.move)
+        return pv_line
+
+

@@ -194,7 +194,7 @@ def get_best_move(board: Board, remaining_time_ms: int, tt: TranspositionTable, 
         # Only break out of iterative deepening if a winning mate is found.
         if best_score is not None and is_mate(best_score):
             break
-        # print(best_move.to_text(), best_score, depth, time.time() - start_time)
+        print(best_move.to_text(), best_score, depth, time.time() - start_time)
 
         if max_depth is not None and depth == max_depth:
             break
@@ -206,10 +206,12 @@ def get_best_move(board: Board, remaining_time_ms: int, tt: TranspositionTable, 
 
 
 if __name__ == '__main__':
-    p = "0N1N0N0N0N0N0B0N0G1N0N0N0G2N0N1N0N0B0N0N0N0N0N0N0N1100"
+    p = "0N0N0N0N0N0N1N0N0N0N0B1G0G0N0N0N3N3N0B0N0N3N3N0N0N0980"
 
     board = Board(p)
-    remaining_time_ms: int = 1000 * 60 * 10
+    remaining_time_ms: int = 1000 * 40
     tt = TranspositionTable()
-    bm = get_best_move(board, remaining_time_ms, tt, max_depth=1)
-    print(bm.to_text())
+    bm = get_best_move(board, remaining_time_ms, tt)
+    pv_line = tt.probe_pv_line(board)
+    for i, move in enumerate(pv_line):
+        print(f"{i+1}. {move.to_text()}")
