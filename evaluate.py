@@ -23,6 +23,8 @@ PARAMS = Parameters(
     ph1=20, ph2=10
 )
 
+TEMPO = 50
+
 def score_position(b: Board, parameters: Parameters = PARAMS) -> int:
     def score_worker(worker_pos: int) -> int:
         square = b.workers[worker_pos]
@@ -66,12 +68,5 @@ def score_position(b: Board, parameters: Parameters = PARAMS) -> int:
         )
 
         return p_score + h_score + support
-
-    return score_worker(0) + score_worker(1) - score_worker(2) - score_worker(3)
-
-
-
-if __name__ == '__main__':
-    board = Board("2G2N0N0N2N0N4N0N1N2B0N1B0G0N2N0N0N0N0N0N0N0N0N0N0N1500")
-    default_parameters = Parameters(20, 300, 30, 55, 35, 85)
-    print(score_position(board, default_parameters))
+    tempo_score = TEMPO if b.turn == 1 else 0
+    return score_worker(0) + score_worker(1) - score_worker(2) - score_worker(3) + tempo_score
